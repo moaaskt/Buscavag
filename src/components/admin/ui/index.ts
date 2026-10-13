@@ -6,3 +6,4 @@ export * from './VelzonInput';
 export * from './VelzonTextarea';
 export * from './VelzonSelect';
 export * from './VelzonLabel';
+export * from './VelzonSubTabs';
