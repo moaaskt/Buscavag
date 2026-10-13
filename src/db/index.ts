@@ -57,7 +57,9 @@ export function initDatabase() {
       work_model TEXT,
       is_tech_software INTEGER DEFAULT 1,
       status TEXT DEFAULT 'active',
-      fingerprint TEXT
+      fingerprint TEXT,
+      city TEXT,
+      state TEXT
     );
 
     CREATE TABLE IF NOT EXISTS scraper_logs (
@@ -306,6 +308,8 @@ export function initDatabase() {
       { name: 'is_tech_software', type: 'INTEGER DEFAULT 1' },
       { name: 'status', type: "TEXT DEFAULT 'active'" },
       { name: 'fingerprint', type: 'TEXT' },
+      { name: 'city', type: 'TEXT' },
+      { name: 'state', type: 'TEXT' },
     ];
 
     for (const col of jobColumnsToAdd) {
@@ -315,6 +319,8 @@ export function initDatabase() {
     }
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_jobs_fingerprint ON jobs(fingerprint);');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_jobs_city ON jobs(city);');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);');
 
     // Garante que registros sem status sejam marcados como 'active'
     db.exec("UPDATE jobs SET status = 'active' WHERE status IS NULL;");
@@ -395,6 +401,8 @@ export function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_jobs_notified ON jobs(notified);
       CREATE INDEX IF NOT EXISTS idx_jobs_app_status ON jobs(application_status);
       CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+      CREATE INDEX IF NOT EXISTS idx_jobs_city ON jobs(city);
+      CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
       CREATE INDEX IF NOT EXISTS idx_logs_run_id ON scraper_logs(run_id);
       CREATE INDEX IF NOT EXISTS idx_logs_level ON scraper_logs(level);
       CREATE INDEX IF NOT EXISTS idx_logs_scraper_name ON scraper_logs(scraper_name);
