@@ -8,7 +8,7 @@ import { VelzonBadge } from '@/components/admin/ui/VelzonBadge';
 import { VelzonStatWidget } from '@/components/admin/ui/VelzonStatWidget';
 import { VelzonModal } from '@/components/admin/ui/VelzonModal';
 import { VelzonSelect } from '@/components/admin/ui/VelzonSelect';
-import { ScraperLiveTerminal } from '@/components/admin/scrapers/ScraperLiveTerminal';
+import { VelzonSubTabs, SubTabItem } from '@/components/admin/ui/VelzonSubTabs';
 import {
   Cpu,
   RefreshCw,
@@ -30,6 +30,9 @@ import {
   Timer,
   FileText,
   ScrollText,
+  Terminal,
+  Sliders,
+  Settings,
 } from 'lucide-react';
 import {
   ScraperMonitoringItem,
@@ -39,6 +42,15 @@ import {
 } from '@/db/adminScraperRepository';
 
 export default function AdminScrapersPage() {
+  const scraperSubTabs: SubTabItem[] = useMemo(
+    () => [
+      { label: 'Painel & Telemetria', href: '/admin/scrapers', icon: Activity },
+      { label: 'Terminal SSE Ao Vivo', href: '/admin/scrapers/terminal', icon: Terminal },
+      { label: 'Configurações de Conectores', href: '/admin/scrapers/config', icon: Sliders },
+    ],
+    []
+  );
+
   const [items, setItems] = useState<ScraperMonitoringItem[]>([]);
   const [summary, setSummary] = useState<ScraperMonitoringSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -420,6 +432,11 @@ export default function AdminScrapersPage() {
         </div>
       </div>
 
+      {/* Sub-Navegação por Abas da Central de Scrapers */}
+      <div className="mt-4">
+        <VelzonSubTabs tabs={scraperSubTabs} />
+      </div>
+
       {/* Widgets Estatísticos Calculados em Tempo Real */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
         <VelzonStatWidget
@@ -555,8 +572,33 @@ export default function AdminScrapersPage() {
         </VelzonCard>
       </div>
 
-      {/* Terminal de Logs SSE em Tempo Real */}
-      <ScraperLiveTerminal className="mt-8" />
+      {/* Card de Atalho para o Terminal SSE em Tela Cheia */}
+      <div className="mt-8 p-4 rounded-xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-slate-800 shadow-md flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0 text-indigo-400">
+            <Terminal className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold flex items-center gap-2 text-slate-100">
+              Terminal de Logs SSE em Tempo Real
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <Radio className="w-2.5 h-2.5 animate-pulse" /> Ao Vivo
+              </span>
+            </h4>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Acesse o console em tela cheia com transmissão SSE contínua, auto-scroll, filtros por severidade e exportação.
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/admin/scrapers/terminal"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#405189] hover:bg-[#364473] text-white text-xs font-semibold shadow-sm transition whitespace-nowrap cursor-pointer"
+        >
+          <Terminal className="w-4 h-4" />
+          Abrir Terminal Dedicado
+          <ExternalLink className="w-3.5 h-3.5 ml-1" />
+        </Link>
+      </div>
 
       {/* Tabela de Monitoramento & Métricas de Conectores */}
       <div className="mt-8">
