@@ -56,6 +56,8 @@ export const RawJobSchema = z.object({
   description: z.string(),
   publishedAt: z.date(),
   location: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
 });
 
 export type RawJob = z.infer<typeof RawJobSchema>;
