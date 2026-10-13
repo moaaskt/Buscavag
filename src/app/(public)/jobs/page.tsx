@@ -405,11 +405,25 @@ export default function JobsPage() {
               onChange={(e) => setLocationFilter(e.target.value)}
               className="w-full h-9 px-2.5 bg-zinc-50 dark:bg-zinc-800/80 rounded-lg border border-zinc-200 dark:border-zinc-700/60 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 transition-colors cursor-pointer"
             >
-              <option value="all">Todas as Cidades</option>
-              <option value="remoto">🌐 100% Remoto</option>
-              <option value="florianopolis">📍 Florianópolis / Floripa (SC)</option>
-              <option value="sao_jose">📍 São José (SC)</option>
-              <option value="palhoca">📍 Palhoça (SC)</option>
+              <option value="all">Todas as Localizações</option>
+              <option value="remoto">🌐 100% Remoto (Nacional)</option>
+              <optgroup label="🏔️ Santa Catarina (Foco Principal)">
+                <option value="sc">Todo o Estado de Santa Catarina (SC)</option>
+                <option value="florianopolis">📍 Florianópolis / Floripa</option>
+                <option value="sao_jose">📍 São José</option>
+                <option value="palhoca">📍 Palhoça</option>
+                <option value="joinville">📍 Joinville</option>
+                <option value="blumenau">📍 Blumenau</option>
+                <option value="balneario_camboriu">📍 Balneário Camboriú / Itajaí</option>
+              </optgroup>
+              <optgroup label="🏙️ Outras Capitais & Polos">
+                <option value="sp">São Paulo (SP)</option>
+                <option value="curitiba">Curitiba (PR)</option>
+                <option value="porto_alegre">Porto Alegre (RS)</option>
+                <option value="rio_de_janeiro">Rio de Janeiro (RJ)</option>
+                <option value="belo_horizonte">Belo Horizonte (MG)</option>
+                <option value="brasilia">Brasília (DF)</option>
+              </optgroup>
             </select>
           </div>
 
