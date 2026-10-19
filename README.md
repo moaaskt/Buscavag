@@ -1,4 +1,5 @@
 # Buscavag 🎯🤖
+![Desenvolvimento](https://img.shields.io/badge/Desenvolvimento-Cont%C3%ADnuo-FF9800?style=for-the-badge&logo=github&logoColor=white)
 
 > **Autonomous Job Intelligence & Career Automation Platform**  
 > Plataforma SaaS de alta disponibilidade para monitoramento 24/7, extração stealth em múltiplos canais, curadoria semântica com Inteligência Artificial, gestão de candidaturas via Kanban multi-inquilino e alertas automatizados multicanal.
