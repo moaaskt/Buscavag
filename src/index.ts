@@ -4,7 +4,7 @@ import { JobRepository } from './db/repository.js';
 import { HermesEvaluator } from './services/hermesEvaluator.js';
 import { TelegramNotifier } from './services/telegramNotifier.js';
 import { isOlderThanDays } from './utils/date.js';
-import { matchesBlacklist, matchesWhitelist } from './config/jobFilters.js';
+import { matchesBlacklist, matchesWhitelist, isTechJob } from './config/jobFilters.js';
 import { ScraperLogger } from './services/scraperLogger.js';
 
 dotenv.config();
@@ -161,6 +161,17 @@ export async function runPipeline(customLogger?: ScraperLogger, targetScraperNam
     const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     for (const job of pendingNotifications) {
+      if (!isTechJob(job.title) || job.isTechSoftware === false) {
+        const skipMsg = `[TELEGRAM BLOQUEADO] Vaga não-tech ignorada na notificação: "${job.title}" (${job.company})`;
+        console.warn(`  ⚠️ ${skipMsg}`);
+        logger.warn(skipMsg, {
+          step: 'PROGRESS',
+          data: { title: job.title, company: job.company, filter: 'telegram_guard' },
+        });
+        repo.markAsNotified(job.id);
+        continue;
+      }
+
       const sent = await notifier.sendNotification(job);
       if (sent) {
         repo.markAsNotified(job.id);

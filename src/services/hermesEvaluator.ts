@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { RawJob } from '../types/job.js';
-import { matchesWhitelist, matchesBlacklist } from '../config/jobFilters.js';
-import { evaluateSeniorityDistance, parseSalary } from './candidateMatcher.js';
+import { matchesWhitelist, matchesBlacklist, cleanJobTitle } from '../config/jobFilters.js';
+import { parseSalary } from './candidateMatcher.js';
 
 export interface EvaluationResult {
   isTechSoftware?: boolean;
@@ -40,7 +40,44 @@ export class HermesEvaluator {
     }
   }
 
+  private buildNonTechResult(job: RawJob, reasoning: string): EvaluationResult {
+    return {
+      isTechSoftware: false,
+      requiredSeniority: 'Não especificado',
+      techStack: [],
+      workModel: 'Presencial',
+      location: job.location || 'Não informada',
+      salary: 'Não informado',
+      category: 'Não-Tech',
+      extractedRole: job.title,
+      contractType: 'Não informado',
+      applicationChannel: 'Não informado',
+      directContact: undefined,
+      reasoning,
+      isJuniorFullStack: false,
+      overallScore: 0,
+      score: 0,
+      stackScore: 0,
+      seniorityScore: 0,
+      locationScore: 0,
+      gaps: [],
+      resumeTips: '',
+    };
+  }
+
   public async evaluate(job: RawJob): Promise<EvaluationResult> {
+    // 1. Verificação prévia mandatória antes de chamar a IA:
+    // Se o título estiver na blacklist ou não possuir termo técnico de whitelist, rejeita de imediato
+    const blacklistCheck = matchesBlacklist(job.title);
+    if (blacklistCheck.matched) {
+      return this.buildNonTechResult(job, `Rejeitada via Blacklist: ${blacklistCheck.term || job.title}`);
+    }
+
+    const whitelistCheck = matchesWhitelist(job.title);
+    if (!whitelistCheck.matched) {
+      return this.buildNonTechResult(job, `Rejeitada: Título sem termos técnicos de TI/Software (${job.title})`);
+    }
+
     if (!this.client) {
       return this.evaluateHeuristic(job);
     }
@@ -66,7 +103,7 @@ DIRETRIZES FUNDAMENTAIS:
      • Financeiro, Contabilidade, Fiscal, Jurídico, Compliance, Administrativo, Secretariado
      • Suporte Nível 1 / Atendimento ao Cliente / SAC / Help Desk operacional
      • Marketing Digital operacional, Social Media, Copywriter, Redator
-     • Cargos operacionais gerais (motorista, balconista, estoquista, ajudante)
+     • Cargos operacionais gerais (motorista, balconista, estoquista, ajudante, usinagem, CNC)
 
 2. CATEGORIZAÇÃO TÉCNICA (category):
    - Classifique estritamente em: "Frontend", "Backend", "Full Stack", "DevOps", "Data", "Mobile", "QA", "IoT & Embarcados", "Security", "Product & UI/UX" ou "Other" (se isTechSoftware for false).
@@ -107,9 +144,9 @@ Responda APENAS em formato JSON no seguinte formato:
 }
 `;
 
-      let modelName = process.env.HERMES_MODEL || 'gemini-flash-latest';
+      let modelName = process.env.HERMES_MODEL || 'gemini-2.5-flash';
       if (modelName.includes('gpt')) {
-        modelName = 'gemini-flash-latest';
+        modelName = 'gemini-2.5-flash';
       }
 
       const response = await this.client.models.generateContent({
@@ -125,6 +162,10 @@ Responda APENAS em formato JSON no seguinte formato:
       if (content) {
         const parsed = JSON.parse(content);
         const isTechSoftware = Boolean(parsed.isTechSoftware);
+        if (!isTechSoftware) {
+          return this.buildNonTechResult(job, parsed.reasoning || 'Vaga fora do escopo de TI/Software');
+        }
+
         const category = isTechSoftware ? String(parsed.category || 'Full Stack') : 'Other';
         const requiredSeniority = String(parsed.requiredSeniority || 'Não especificado');
         const techStack = Array.isArray(parsed.techStack) ? parsed.techStack.map(String) : [];
@@ -174,29 +215,25 @@ Responda APENAS em formato JSON no seguinte formato:
   }
 
   public evaluateHeuristic(job: RawJob): EvaluationResult {
-    const text = `${job.title} ${job.description}`.toLowerCase();
-    const titleLower = job.title.toLowerCase();
+    const cleanTitle = cleanJobTitle(job.title);
+    const text = `${cleanTitle} ${job.description}`.toLowerCase();
+    const titleLower = cleanTitle.toLowerCase();
 
-    // 1. FILTRO ANTI-FALSO-POSITIVO (NÃO-TECH / SUPORTE / VENDAS / RH / ENGENHARIAS NÃO-SOFTWARE)
+    // 1. FILTRO ANTI-FALSO-POSITIVO (NÃO-TECH / SUPORTE / VENDAS / RH / ENGENHARIAS NÃO-SOFTWARE / CNC)
     const blacklistResult = matchesBlacklist(job.title);
-    const nonTechPatterns = [
-      /\b(sdr|bdr|inside sales|vendedor|vendedora|vendas|comercial|telemarketing|atendente|recepcionista)\b/i,
-      /\b(recrutador|recrutadora|tech recruiter|talent acquisition|recursos humanos|analista de rh)\b/i,
-      /\b(contador|contadora|contabilidade|fiscal|financeiro|secretariado|auxiliar administrativo)\b/i,
-      /\b(motorista|balconista|estoquista|almoxarife|operador de caixa)\b/i,
-      /\b(suporte n[ií]vel 1|helpdesk|help desk|sac)\b/i,
-    ];
+    if (blacklistResult.matched) {
+      return this.buildNonTechResult(job, `Rejeitada via Heurística (Blacklist): ${blacklistResult.term || job.title}`);
+    }
 
-    const isNonTech = blacklistResult.matched || nonTechPatterns.some((pattern) => pattern.test(titleLower));
-
-    // Validação tech mínima:
-    // Deve ter match na whitelist de título OU possuir termos explícitos de desenvolvimento de software no título ou descrição
+    // 2. VALIDAÇÃO TECH MANDATÓRIA (WHITELIST DE TÍTULO TÉCNICO)
     const whitelistResult = matchesWhitelist(job.title);
-    const hasExplicitDevTerm = /desenvolvedor|developer|engenheiro de software|programador|frontend|front-end|backend|back-end|full\s*stack|fullstack|devops|data engineer|analista de dados|analista de sistemas|software engineer/i.test(text);
+    if (!whitelistResult.matched) {
+      return this.buildNonTechResult(job, `Rejeitada via Heurística: Título sem termos de tecnologia/software reconhecidos (${job.title})`);
+    }
 
-    const isTechSoftware = !isNonTech && (whitelistResult.matched || hasExplicitDevTerm);
+    const isTechSoftware = true;
 
-    // 2. DETECÇÃO DE SENIORIDADE
+    // 3. DETECÇÃO DE SENIORIDADE
     let requiredSeniority = 'Não especificado';
     if (/\b(est[aá]gio|estagi[aá]rio|intern|trainee)\b/i.test(titleLower)) {
       requiredSeniority = 'Estágio';
@@ -216,37 +253,33 @@ Responda APENAS em formato JSON no seguinte formato:
       requiredSeniority = 'Júnior';
     }
 
-    // 3. CATEGORIZAÇÃO
-    let category = 'Não-Tech';
-    if (isTechSoftware) {
-      if (/esp32|esp8266|arduino|raspberry|iot|mqtt|home assistant|embarcados|automa[cç][aã]o/i.test(text)) {
-        category = 'IoT & Embarcados';
-      } else if (/react native|flutter|mobile|android|ios|swift|kotlin/i.test(text)) {
-        category = 'Mobile';
-      } else if (/devops|sre|cloud|kubernetes|docker|terraform|infraestrutura|sysadmin/i.test(text)) {
-        category = 'DevOps';
-      } else if (/dados|data engineer|data science|analytics|bi|machine learning|ia\b/i.test(text)) {
-        category = 'Data';
-      } else if (/qa|qualidade de software|testes|tester|cypress|selenium/i.test(text)) {
-        category = 'QA';
-      } else if (/security|seguran[cç]a|cybersec|pentest/i.test(text)) {
-        category = 'Security';
-      } else if (/product manager|product owner|ui\/ux|ux designer|ui designer/i.test(text)) {
-        category = 'Product & UI/UX';
-      } else if (/frontend|front-end|front end/i.test(text) && !/backend|back-end/i.test(text)) {
-        category = 'Frontend';
-      } else if (/backend|back-end|back end/i.test(text) && !/frontend|front-end/i.test(text)) {
-        category = 'Backend';
-      } else if (/full\s*stack|fullstack|full-stack/i.test(text) || (/frontend|front-end/i.test(text) && /backend|back-end/i.test(text))) {
-        // Apenas vagas que expressamente mencionam full stack ou ambas as pontas
-        category = 'Full Stack';
-      } else {
-        // JAMAIS atribuir Full Stack por default!
-        category = 'Software Geral';
-      }
+    // 4. CATEGORIZAÇÃO TÉCNICA
+    let category = 'Software Geral';
+    if (/esp32|esp8266|arduino|raspberry|iot|mqtt|home assistant|embarcados|sistemas embarcados/i.test(text)) {
+      category = 'IoT & Embarcados';
+    } else if (/react native|flutter|mobile|android|ios|swift|kotlin/i.test(text)) {
+      category = 'Mobile';
+    } else if (/\b(devops|sre|cloud|kubernetes|docker|terraform|infraestrutura|sysadmin)\b/i.test(text)) {
+      category = 'DevOps';
+    } else if (/\b(data engineer|data science|data scientist|analytics|analista de bi|machine learning|intelig[eê]ncia artificial|ia\b|engenheiro de dados|cientista de dados)\b/i.test(text)) {
+      category = 'Data';
+    } else if (/\b(qa|qualidade de software|testes|tester|cypress|selenium)\b/i.test(text)) {
+      category = 'QA';
+    } else if (/\b(security|seguran[cç]a da informa[cç][aã]o|cybersec|pentest|appsec)\b/i.test(text)) {
+      category = 'Security';
+    } else if (/\b(product manager|product owner|ui\/ux|ux designer|ui designer)\b/i.test(text)) {
+      category = 'Product & UI/UX';
+    } else if (/full\s*stack|fullstack|full-stack/i.test(text) || (/frontend|front-end/i.test(text) && /backend|back-end/i.test(text))) {
+      category = 'Full Stack';
+    } else if (/frontend|front-end|front end/i.test(text) && !/backend|back-end/i.test(text)) {
+      category = 'Frontend';
+    } else if (/backend|back-end|back end/i.test(text) && !/frontend|front-end/i.test(text)) {
+      category = 'Backend';
+    } else {
+      category = 'Software Geral';
     }
 
-    // 4. EXTRAÇÃO DE STACKS TÉCNICAS
+    // 5. EXTRAÇÃO DE STACKS TÉCNICAS
     const commonTechs = [
       'javascript', 'typescript', 'node.js', 'react', 'next.js', 'vue', 'angular',
       'python', 'django', 'flask', 'fastapi', 'java', 'spring', 'c#', '.net',
@@ -265,7 +298,7 @@ Responda APENAS em formato JSON no seguinte formato:
       }
     }
 
-    // 5. MODELO DE TRABALHO
+    // 6. MODELO DE TRABALHO
     let workModel = 'Presencial';
     if (/remoto|remote|home office|teletrabalho|anywhere/i.test(text) || /remoto|home office/i.test(job.location || '')) {
       workModel = 'Remoto';
@@ -273,7 +306,7 @@ Responda APENAS em formato JSON no seguinte formato:
       workModel = 'Híbrido';
     }
 
-    // 6. EXTRAÇÃO DE SALÁRIO & CONTATO DIRETO
+    // 7. EXTRAÇÃO DE SALÁRIO & CONTATO DIRETO
     const salary = parseSalary(job.description ? job.description.match(/(?:r\$|sal[áa]rio:?)\s*[\d.,k\s-]+/i)?.[0] : null);
     const salaryStr = salary ? `R$ ${salary.min}${salary.max !== salary.min ? ` - R$ ${salary.max}` : ''}` : 'Não informado';
 
@@ -284,12 +317,7 @@ Responda APENAS em formato JSON no seguinte formato:
     const isJuniorFullStack = isTechSoftware && (requiredSeniority === 'Júnior' || requiredSeniority === 'Estágio' || requiredSeniority === 'Não especificado');
     const overallScore = isTechSoftware ? 85 : 0;
 
-    let reasoning = '';
-    if (!isTechSoftware) {
-      reasoning = `Rejeitada via Heurística: Oportunidade não classificada como desenvolvimento ou tecnologia (${job.title}).`;
-    } else {
-      reasoning = `Aprovada via Heurística: Vaga técnica de ${category} (Nível: ${requiredSeniority}, Modelo: ${workModel}). ${techStack.length} tecnologias detectadas.`;
-    }
+    const reasoning = `Aprovada via Heurística: Vaga técnica de ${category} (Nível: ${requiredSeniority}, Modelo: ${workModel}). ${techStack.length} tecnologias detectadas.`;
 
     return {
       isTechSoftware,

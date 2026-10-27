@@ -71,6 +71,12 @@ const TEST_SUITES: TestSuite[] = [
     file: 'src/test-phase70.ts',
     description: 'AUTH_SECRET estrito, lock concorrente e cooldown de CV',
   },
+  {
+    id: 'antinoise-filters',
+    name: 'Anti-Noise & CNC Guard',
+    file: 'src/test-job-filters-antinoise.ts',
+    description: 'Blindagem anti-ruído para vagas não-tech, usinagem/CNC e sanitização de botões',
+  },
 ];
 
 export function runAllSuites(suites: TestSuite[] = TEST_SUITES): { results: TestResult[]; allPassed: boolean } {
