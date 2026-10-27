@@ -12,9 +12,8 @@ export const TITLE_BLACKLIST_PATTERNS: Array<{ pattern: RegExp; name: string }> 
     pattern: /^(assistente|auxiliar)\s+(fiscal|administrativ[oa]|financeir[oa]|cont[aá]bil)/i,
     name: 'Assistente/Auxiliar Início de Título',
   },
-  // 2. Vendas, corretores, consultoria comercial e atendimento
   {
-    pattern: /\b(corretor[a]?\s+(de im[oó]veis|de seguros)|vendedor[a]?|consultor[a]?\s+de vendas|telemarketing|atendente|recepcionista|operador[a]?\s+de caixa|balconista|promotor[a]?\s+de vendas|executiv[oa]\s+de vendas|consultor[a]?\s+comercial)\b/i,
+    pattern: /\b(corretor[a]?\s+(de im[oó]veis|de seguros)|vendedor[a]?|consultor[a]?\s+de vendas|telemarketing|atendente|recepcionista|operador[a]?\s+de caixa|balconista|promotor[a]?\s+de vendas|executiv[oa]\s+de vendas|consultor[a]?\s+comercial)/i,
     name: 'Vendas e Atendimento',
   },
   // 3. Saúde, medicina, enfermagem e estética

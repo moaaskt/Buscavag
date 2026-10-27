@@ -2,11 +2,18 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/layout/AdminLayout';
-import { VelzonCard } from '@/components/admin/ui/VelzonCard';
-import { VelzonBadge } from '@/components/admin/ui/VelzonBadge';
-import { VelzonStatWidget } from '@/components/admin/ui/VelzonStatWidget';
-import { VelzonModal } from '@/components/admin/ui/VelzonModal';
-import { VelzonInput, VelzonSelect, VelzonTextarea, VelzonLabel } from '@/components/admin/ui';
+import {
+  VelzonCard,
+  VelzonBadge,
+  VelzonStatWidget,
+  VelzonModal,
+  VelzonInput,
+  VelzonSelect,
+  VelzonTextarea,
+  VelzonLabel,
+  VelzonSubTabs,
+  SubTabItem,
+} from '@/components/admin/ui';
 import {
   Building2,
   Search,
@@ -336,6 +343,29 @@ export default function AdminEmpresasPage() {
     }
   };
 
+  const empresasSubTabs: SubTabItem[] = [
+    {
+      id: 'all',
+      label: 'Todas as Empresas',
+      icon: Building2,
+      badge: stats.totalCompanies > 0 ? stats.totalCompanies : undefined,
+    },
+    {
+      id: 'active',
+      label: 'Parceiras Ativas',
+      icon: ShieldCheck,
+      badge: stats.activePartners > 0 ? stats.activePartners : undefined,
+      badgeVariant: 'success',
+    },
+    {
+      id: 'prospect',
+      label: 'Prospecção & Livres',
+      icon: Target,
+      badge: stats.prospectCompanies > 0 ? stats.prospectCompanies : undefined,
+      badgeVariant: 'default',
+    },
+  ];
+
   return (
     <AdminLayout>
       {/* Toast Notification */}
@@ -357,9 +387,10 @@ export default function AdminEmpresasPage() {
       )}
 
       {/* Top Banner & Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e9ebec] dark:border-slate-800 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e9ebec] dark:border-slate-800">
         <div>
           <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <Building2 className="w-6 h-6 text-[#405189]" />
             Gestão de Empresas & Parcerias B2B
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
@@ -386,6 +417,18 @@ export default function AdminEmpresasPage() {
             <span>Nova Empresa</span>
           </button>
         </div>
+      </div>
+
+      {/* Sub-Navegação por Abas do Módulo de Empresas */}
+      <div className="mt-4 mb-6">
+        <VelzonSubTabs
+          tabs={empresasSubTabs}
+          activeTab={status}
+          onTabChange={(tabId) => {
+            setStatus(tabId);
+            setPage(1);
+          }}
+        />
       </div>
 
       {/* 4 KPI Widgets */}

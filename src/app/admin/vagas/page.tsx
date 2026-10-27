@@ -2,11 +2,18 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/layout/AdminLayout';
-import { VelzonCard } from '@/components/admin/ui/VelzonCard';
-import { VelzonBadge } from '@/components/admin/ui/VelzonBadge';
-import { VelzonStatWidget } from '@/components/admin/ui/VelzonStatWidget';
-import { VelzonModal } from '@/components/admin/ui/VelzonModal';
-import { VelzonInput, VelzonSelect, VelzonLabel, VelzonTextarea } from '@/components/admin/ui';
+import {
+  VelzonCard,
+  VelzonBadge,
+  VelzonInput,
+  VelzonSelect,
+  VelzonLabel,
+  VelzonTextarea,
+  VelzonStatWidget,
+  VelzonModal,
+  VelzonSubTabs,
+  SubTabItem,
+} from '@/components/admin/ui';
 import {
   Briefcase,
   Search,
@@ -43,22 +50,24 @@ export default function AdminVagasPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
 
-  // Alternador de Visualização (Tabela vs. Kanban)
-  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
+  // Sub-Navegação & Visualização (Tabela vs. Kanban vs. Expurgo)
+  const [activeTab, setActiveTab] = useState<'table' | 'kanban' | 'purge'>('table');
+  const viewMode = activeTab === 'kanban' ? 'kanban' : 'table';
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('buscavag_jobs_view');
-      if (saved === 'kanban' || saved === 'table') {
-        setViewMode(saved);
+      if (saved === 'kanban' || saved === 'table' || saved === 'purge') {
+        setActiveTab(saved as any);
       }
     } catch {}
   }, []);
 
-  const handleSwitchView = (mode: 'table' | 'kanban') => {
-    setViewMode(mode);
+  const handleSwitchTab = (tab: string) => {
+    const validTab = tab === 'kanban' || tab === 'purge' ? tab : 'table';
+    setActiveTab(validTab as any);
     try {
-      localStorage.setItem('buscavag_jobs_view', mode);
+      localStorage.setItem('buscavag_jobs_view', validTab);
     } catch {}
   };
 
@@ -450,6 +459,27 @@ ${urlStr}`;
     </div>
   );
 
+  const vagasSubTabs: SubTabItem[] = [
+    {
+      id: 'table',
+      label: 'Tabela de Oportunidades',
+      icon: Table,
+      badge: total > 0 ? total : undefined,
+    },
+    {
+      id: 'kanban',
+      label: 'Kanban Visual de Vagas',
+      icon: LayoutGrid,
+    },
+    {
+      id: 'purge',
+      label: 'Expurgo Seguro & Retenção',
+      icon: Trash2,
+      badge: stats.eligibleForPurge > 0 ? stats.eligibleForPurge : undefined,
+      badgeVariant: 'danger',
+    },
+  ];
+
   return (
     <AdminLayout>
       {/* Toast de Notificação de Disparo */}
@@ -473,7 +503,8 @@ ${urlStr}`;
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e9ebec] dark:border-slate-800">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100">
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <Briefcase className="w-6 h-6 text-[#405189]" />
             Gestão de Vagas Expostas & Expurgo
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
@@ -482,34 +513,6 @@ ${urlStr}`;
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Alternador de Visualização: Tabela vs. Kanban */}
-          <div className="flex items-center border border-[#e9ebec] dark:border-slate-700 rounded-lg p-0.5 bg-slate-100 dark:bg-slate-800">
-            <button
-              onClick={() => handleSwitchView('table')}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                viewMode === 'table'
-                  ? 'bg-white dark:bg-slate-700 text-[#405189] dark:text-indigo-300 shadow-2xs'
-                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
-              }`}
-              title="Visualização em Tabela"
-            >
-              <Table className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Tabela</span>
-            </button>
-            <button
-              onClick={() => handleSwitchView('kanban')}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                viewMode === 'kanban'
-                  ? 'bg-white dark:bg-slate-700 text-[#405189] dark:text-indigo-300 shadow-2xs'
-                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
-              }`}
-              title="Visualização em Colunas Kanban"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Kanban</span>
-            </button>
-          </div>
-
           <button
             onClick={() => setIsPurgeModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 transition-colors shadow-2xs"
@@ -532,6 +535,15 @@ ${urlStr}`;
             <span>Atualizar</span>
           </button>
         </div>
+      </div>
+
+      {/* Sub-Navegação por Abas do Módulo de Vagas */}
+      <div className="mt-4">
+        <VelzonSubTabs
+          tabs={vagasSubTabs}
+          activeTab={activeTab}
+          onTabChange={(id) => handleSwitchTab(id as any)}
+        />
       </div>
 
       {/* KPI Stat Widgets */}
@@ -577,9 +589,94 @@ ${urlStr}`;
         />
       </div>
 
-      {/* Barra de Filtros & Operações */}
+      {/* Barra de Filtros & Operações ou Painel de Expurgo */}
       <VelzonCard noPadding>
-        <div className="p-4 md:p-5 border-b border-[#e9ebec] dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30">
+        {activeTab === 'purge' ? (
+          <div className="p-6 space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Governança de Retenção & Expurgo Definitivo no SQLite
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                    Remove vagas ocultadas ou expiradas há mais de {purgeRetention} dias. Esta operação executa <code>incremental_vacuum</code> e otimiza os índices B-Tree do banco.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsPurgeModalOpen(true)}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors shadow-2xs flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Abrir Assistente de Expurgo
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-[#e9ebec] dark:border-slate-800">
+                <span className="text-xs text-slate-500 font-mono">Vagas Elegíveis para Expurgo</span>
+                <div className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
+                  {stats.eligibleForPurge.toLocaleString('pt-BR')}
+                </div>
+                <span className="text-[11px] text-slate-400 mt-1 block">Inativas há mais de {stats.retentionDays} dias</span>
+              </div>
+              <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-[#e9ebec] dark:border-slate-800">
+                <span className="text-xs text-slate-500 font-mono">Janela de Retenção Ativa</span>
+                <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">
+                  {purgeRetention} dias
+                </div>
+                <span className="text-[11px] text-slate-400 mt-1 block">Configuração padrão do sistema</span>
+              </div>
+              <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-[#e9ebec] dark:border-slate-800">
+                <span className="text-xs text-slate-500 font-mono">Status da Base de Dados</span>
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1.5">
+                  <Database className="w-5 h-5" />
+                  WAL Ativo
+                </div>
+                <span className="text-[11px] text-slate-400 mt-1 block">Auto-vacuum incremental habilitado</span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-lg border border-[#e9ebec] dark:border-slate-800 bg-white dark:bg-slate-800/60 space-y-3">
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider font-mono">
+                Ações Rápidas de Limpeza
+              </h4>
+              <p className="text-xs text-slate-500">
+                Você pode executar a pré-visualização ou disparar o expurgo seguro sem sair do painel:
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleExecutePurge}
+                  disabled={purging || stats.eligibleForPurge === 0}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800 flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {purging ? 'Expurgando registros...' : `Executar Expurgo Seguro (${stats.eligibleForPurge} vagas)`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPurgeModalOpen(true)}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg border border-[#e9ebec] dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                >
+                  Configurar Dias de Retenção
+                </button>
+              </div>
+              {purgeSuccessMessage && (
+                <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs border border-emerald-200 dark:border-emerald-800 mt-2">
+                  {purgeSuccessMessage}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="p-4 md:p-5 border-b border-[#e9ebec] dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {/* Busca Textual */}
             <div className="lg:col-span-2 relative">
@@ -892,6 +989,8 @@ ${urlStr}`;
             </button>
           </div>
         </div>
+          </>
+        )}
       </VelzonCard>
 
       {/* Modal de Edição Rápida */}

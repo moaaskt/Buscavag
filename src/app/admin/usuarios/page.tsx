@@ -2,11 +2,17 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/layout/AdminLayout';
-import { VelzonCard } from '@/components/admin/ui/VelzonCard';
-import { VelzonBadge } from '@/components/admin/ui/VelzonBadge';
-import { VelzonStatWidget } from '@/components/admin/ui/VelzonStatWidget';
-import { VelzonModal } from '@/components/admin/ui/VelzonModal';
-import { VelzonInput, VelzonSelect, VelzonLabel } from '@/components/admin/ui';
+import {
+  VelzonCard,
+  VelzonBadge,
+  VelzonStatWidget,
+  VelzonModal,
+  VelzonInput,
+  VelzonSelect,
+  VelzonLabel,
+  VelzonSubTabs,
+  SubTabItem,
+} from '@/components/admin/ui';
 import {
   Users,
   Search,
@@ -46,6 +52,27 @@ export default function AdminUsuariosPage() {
   const [tier, setTier] = useState('all');
   const [status, setStatus] = useState('all');
   const [role, setRole] = useState('all');
+
+  // Sub-Aba Ativa: 'all' | 'pro' | 'free' | 'suspended'
+  const [activeSubTab, setActiveSubTab] = useState<'all' | 'pro' | 'free' | 'suspended'>('all');
+
+  const handleSwitchUserTab = (tabId: string) => {
+    setActiveSubTab(tabId as any);
+    setPage(1);
+    if (tabId === 'all') {
+      setTier('all');
+      setStatus('all');
+    } else if (tabId === 'pro') {
+      setTier('pro');
+      setStatus('all');
+    } else if (tabId === 'free') {
+      setTier('free');
+      setStatus('all');
+    } else if (tabId === 'suspended') {
+      setTier('all');
+      setStatus('suspended');
+    }
+  };
 
   // Métricas de topo
   const [stats, setStats] = useState<AdminUserStats>({
@@ -241,12 +268,43 @@ export default function AdminUsuariosPage() {
     }
   };
 
+  const usuariosSubTabs: SubTabItem[] = [
+    {
+      id: 'all',
+      label: 'Todos os Usuários',
+      icon: Users,
+      badge: stats.totalUsers > 0 ? stats.totalUsers : undefined,
+    },
+    {
+      id: 'pro',
+      label: 'Assinantes PRO',
+      icon: Crown,
+      badge: stats.proUsers > 0 ? stats.proUsers : undefined,
+      badgeVariant: 'warning',
+    },
+    {
+      id: 'free',
+      label: 'Contas Gratuitas',
+      icon: UserCheck,
+      badge: stats.freeUsers > 0 ? stats.freeUsers : undefined,
+      badgeVariant: 'default',
+    },
+    {
+      id: 'suspended',
+      label: 'Suspensos / Bloqueados',
+      icon: ShieldAlert,
+      badge: stats.suspendedUsers > 0 ? stats.suspendedUsers : undefined,
+      badgeVariant: 'danger',
+    },
+  ];
+
   return (
     <AdminLayout>
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e9ebec] dark:border-slate-800">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100">
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <Users className="w-6 h-6 text-[#405189]" />
             Gestão de Usuários & Suporte
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
@@ -264,6 +322,15 @@ export default function AdminUsuariosPage() {
             <span>Atualizar</span>
           </button>
         </div>
+      </div>
+
+      {/* Sub-Navegação por Abas do Módulo de Usuários */}
+      <div className="mt-4 mb-6">
+        <VelzonSubTabs
+          tabs={usuariosSubTabs}
+          activeTab={activeSubTab}
+          onTabChange={handleSwitchUserTab}
+        />
       </div>
 
       {/* KPI Stat Widgets */}
