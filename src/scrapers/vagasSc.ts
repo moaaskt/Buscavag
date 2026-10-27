@@ -3,12 +3,14 @@ import { fetchHtml, JobScraper } from './base.js';
 import { PlatformSource, RawJob } from '../types/job.js';
 import { parseRelativeDate, isOlderThanDays } from '../utils/date.js';
 
+import { cleanJobTitle } from '../config/jobFilters.js';
+
 export class VagasScScraper implements JobScraper {
   name = 'Vagas SC';
 
   async scrape(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
-    const searchSlugs = ['desenvolvedor', 'ti', 'programador'];
+    const searchSlugs = ['desenvolvedor', 'programador', 'software'];
     const seenUrls = new Set<string>();
 
     await Promise.allSettled(
@@ -20,7 +22,7 @@ export class VagasScScraper implements JobScraper {
 
           $('article, .job_listing, .post, [class*="post-container"]').each((_, el) => {
             const titleEl = $(el).find('h2 a, h3 a, .entry-title a, .job-title a, a[rel="bookmark"], a[href*="/vaga/"]').first();
-            const title = titleEl.text().trim();
+            const title = cleanJobTitle(titleEl.text());
             let href = titleEl.attr('href') || $(el).find('a[href*="/vaga/"]').attr('href');
             if (!title || !href || seenUrls.has(href) || href.endsWith('/vagas/')) return;
 

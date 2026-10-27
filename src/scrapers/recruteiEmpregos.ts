@@ -3,12 +3,14 @@ import { fetchHtml, JobScraper } from './base.js';
 import { PlatformSource, RawJob } from '../types/job.js';
 import { parseRelativeDate, isOlderThanDays } from '../utils/date.js';
 
+import { cleanJobTitle } from '../config/jobFilters.js';
+
 export class RecruteiEmpregosScraper implements JobScraper {
   name = 'Recrutei Empregos';
 
   async scrape(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
-    const searchSlugs = ['desenvolvedor', 'programador', 'fullstack', 'tecnologia'];
+    const searchSlugs = ['desenvolvedor', 'programador', 'fullstack', 'software'];
 
     for (const slug of searchSlugs) {
       try {
@@ -22,7 +24,7 @@ export class RecruteiEmpregosScraper implements JobScraper {
           const locationEl = $(el).find('[class*="location"], .local, .cidade');
           const dateEl = $(el).find('time, [class*="date"], .data');
 
-          const title = titleEl.text().trim();
+          const title = cleanJobTitle(titleEl.text());
           let href = titleEl.attr('href') || $(el).find('a').attr('href') || '';
           if (!title || !href) return;
 

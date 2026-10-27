@@ -198,7 +198,7 @@ export class JobRepository {
   }
 
   public getPendingNotifications(): ProcessedJob[] {
-    const stmt = db.prepare('SELECT * FROM jobs WHERE is_junior_fullstack = 1 AND notified = 0');
+    const stmt = db.prepare('SELECT * FROM jobs WHERE is_junior_fullstack = 1 AND is_tech_software = 1 AND notified = 0');
     const rows = stmt.all() as any[];
     return rows.map((row) => this.mapRowToJob(row));
   }
