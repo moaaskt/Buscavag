@@ -2,11 +2,18 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/layout/AdminLayout';
-import { VelzonCard } from '@/components/admin/ui/VelzonCard';
-import { VelzonBadge } from '@/components/admin/ui/VelzonBadge';
-import { VelzonStatWidget } from '@/components/admin/ui/VelzonStatWidget';
-import { VelzonModal } from '@/components/admin/ui/VelzonModal';
-import { VelzonInput, VelzonTextarea, VelzonSelect, VelzonLabel } from '@/components/admin/ui';
+import {
+  VelzonCard,
+  VelzonBadge,
+  VelzonStatWidget,
+  VelzonModal,
+  VelzonInput,
+  VelzonTextarea,
+  VelzonSelect,
+  VelzonLabel,
+  VelzonSubTabs,
+  SubTabItem,
+} from '@/components/admin/ui';
 import {
   DollarSign,
   TrendingUp,
@@ -251,12 +258,35 @@ export default function AdminPagamentosPage() {
     }
   };
 
+  const pagamentosSubTabs: SubTabItem[] = [
+    {
+      id: 'transacoes',
+      label: 'Transações & Faturas',
+      icon: CreditCard,
+      badge: totalPayments > 0 ? totalPayments : undefined,
+    },
+    {
+      id: 'assinaturas',
+      label: 'Assinaturas Recorrentes',
+      icon: Layers,
+      badge: totalSubs > 0 ? totalSubs : undefined,
+      badgeVariant: 'warning',
+    },
+    {
+      id: 'webhooks',
+      label: 'Logs de Webhooks',
+      icon: Webhook,
+      badge: webhooks.length > 0 ? webhooks.length : undefined,
+    },
+  ];
+
   return (
     <AdminLayout>
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e9ebec] dark:border-slate-800 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e9ebec] dark:border-slate-800">
         <div>
           <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <CreditCard className="w-6 h-6 text-[#405189]" />
             Gestão Financeira & Pagamentos
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
@@ -285,6 +315,15 @@ export default function AdminPagamentosPage() {
             <span>Atualizar</span>
           </button>
         </div>
+      </div>
+
+      {/* Sub-Navegação por Abas do Módulo Financeiro */}
+      <div className="mt-4 mb-6">
+        <VelzonSubTabs
+          tabs={pagamentosSubTabs}
+          activeTab={activeTab}
+          onTabChange={(id) => setActiveTab(id as any)}
+        />
       </div>
 
       {/* 4 StatWidgets Financeiros */}
@@ -337,40 +376,12 @@ export default function AdminPagamentosPage() {
         subtitle="Gerenciamento de faturamento, conciliação e eventos de gateways de pagamento"
       >
         {/* Navegação entre Abas */}
-        <div className="flex items-center gap-2 border-b border-slate-200 mb-6">
-          <button
-            onClick={() => setActiveTab('transacoes')}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
-              activeTab === 'transacoes'
-                ? 'border-[#405189] text-[#405189]'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            Transações & Faturas ({totalPayments})
-          </button>
-          <button
-            onClick={() => setActiveTab('assinaturas')}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
-              activeTab === 'assinaturas'
-                ? 'border-[#405189] text-[#405189]'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            Assinaturas Recorrentes ({totalSubs})
-          </button>
-          <button
-            onClick={() => setActiveTab('webhooks')}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
-              activeTab === 'webhooks'
-                ? 'border-[#405189] text-[#405189]'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Webhook className="w-4 h-4" />
-            Logs de Webhooks ({webhooks.length})
-          </button>
+        <div className="mb-6">
+          <VelzonSubTabs
+            tabs={pagamentosSubTabs}
+            activeTab={activeTab}
+            onTabChange={(id) => setActiveTab(id as any)}
+          />
         </div>
 
         {/* ABA 1: TRANSAÇÕES */}
