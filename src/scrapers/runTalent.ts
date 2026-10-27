@@ -7,12 +7,9 @@ export class RunTalentScraper implements JobScraper {
   name = 'RunTalent';
 
   async scrape(): Promise<RawJob[]> {
-    try {
-      return await this.scrapeViaHttp();
-    } catch (err) {
-      console.warn('[RunTalentScraper] HTTP falhou, tentando Playwright:', (err as Error).message);
-      return await this.scrapeViaPlaywright();
-    }
+    // RunTalent utiliza Zoho Recruit com renderização client-side via JavaScript.
+    // Inicialização direta via Playwright Stealth para evitar requisição estática vazia.
+    return await this.scrapeViaPlaywright();
   }
 
   private async scrapeViaHttp(): Promise<RawJob[]> {

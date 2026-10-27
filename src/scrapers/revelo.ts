@@ -7,12 +7,9 @@ export class ReveloScraper implements JobScraper {
   name = 'Revelo';
 
   async scrape(): Promise<RawJob[]> {
-    try {
-      return await this.scrapeViaHttp();
-    } catch (err) {
-      console.warn('[ReveloScraper] HTTP falhou, tentando Playwright:', (err as Error).message);
-      return await this.scrapeViaPlaywright();
-    }
+    // Revelo é uma SPA que depende de renderização client-side via JavaScript.
+    // Inicialização direta via Playwright Stealth sem tentativa inútil de fetch estático prévio.
+    return await this.scrapeViaPlaywright();
   }
 
   private async scrapeViaHttp(): Promise<RawJob[]> {

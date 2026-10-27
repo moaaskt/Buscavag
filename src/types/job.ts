@@ -56,6 +56,8 @@ export const RawJobSchema = z.object({
   description: z.string(),
   publishedAt: z.date(),
   location: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
 });
 
 export type RawJob = z.infer<typeof RawJobSchema>;
@@ -82,6 +84,7 @@ export const ProcessedJobSchema = RawJobSchema.extend({
   techStack: z.array(z.string()).optional(),
   workModel: z.string().optional(),
   isTechSoftware: z.boolean().optional(),
+  fingerprint: z.string().optional(),
   applicationStatus: z.enum(['pending', 'applied', 'interview', 'offer', 'rejected']).default('pending').optional(),
   status: z.enum(['active', 'expired', 'hidden']).default('active').optional(),
   notified: z.boolean().default(false),

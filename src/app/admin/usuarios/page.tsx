@@ -2,10 +2,17 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '@/components/admin/layout/AdminLayout';
-import { VelzonCard } from '@/components/admin/ui/VelzonCard';
-import { VelzonBadge } from '@/components/admin/ui/VelzonBadge';
-import { VelzonStatWidget } from '@/components/admin/ui/VelzonStatWidget';
-import { VelzonModal } from '@/components/admin/ui/VelzonModal';
+import {
+  VelzonCard,
+  VelzonBadge,
+  VelzonStatWidget,
+  VelzonModal,
+  VelzonInput,
+  VelzonSelect,
+  VelzonLabel,
+  VelzonSubTabs,
+  SubTabItem,
+} from '@/components/admin/ui';
 import {
   Users,
   Search,
@@ -45,6 +52,27 @@ export default function AdminUsuariosPage() {
   const [tier, setTier] = useState('all');
   const [status, setStatus] = useState('all');
   const [role, setRole] = useState('all');
+
+  // Sub-Aba Ativa: 'all' | 'pro' | 'free' | 'suspended'
+  const [activeSubTab, setActiveSubTab] = useState<'all' | 'pro' | 'free' | 'suspended'>('all');
+
+  const handleSwitchUserTab = (tabId: string) => {
+    setActiveSubTab(tabId as any);
+    setPage(1);
+    if (tabId === 'all') {
+      setTier('all');
+      setStatus('all');
+    } else if (tabId === 'pro') {
+      setTier('pro');
+      setStatus('all');
+    } else if (tabId === 'free') {
+      setTier('free');
+      setStatus('all');
+    } else if (tabId === 'suspended') {
+      setTier('all');
+      setStatus('suspended');
+    }
+  };
 
   // Métricas de topo
   const [stats, setStats] = useState<AdminUserStats>({
@@ -240,16 +268,44 @@ export default function AdminUsuariosPage() {
     }
   };
 
+  const usuariosSubTabs: SubTabItem[] = [
+    {
+      id: 'all',
+      label: 'Todos os Usuários',
+      icon: Users,
+      badge: stats.totalUsers > 0 ? stats.totalUsers : undefined,
+    },
+    {
+      id: 'pro',
+      label: 'Assinantes PRO',
+      icon: Crown,
+      badge: stats.proUsers > 0 ? stats.proUsers : undefined,
+      badgeVariant: 'warning',
+    },
+    {
+      id: 'free',
+      label: 'Contas Gratuitas',
+      icon: UserCheck,
+      badge: stats.freeUsers > 0 ? stats.freeUsers : undefined,
+      badgeVariant: 'default',
+    },
+    {
+      id: 'suspended',
+      label: 'Suspensos / Bloqueados',
+      icon: ShieldAlert,
+      badge: stats.suspendedUsers > 0 ? stats.suspendedUsers : undefined,
+      badgeVariant: 'danger',
+    },
+  ];
+
   return (
     <AdminLayout>
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e9ebec] dark:border-slate-800">
         <div>
           <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <Users className="w-6 h-6 text-[#405189]" />
             Gestão de Usuários & Suporte
-            <VelzonBadge variant="primary" size="sm">
-              Phase 79
-            </VelzonBadge>
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
             Controle de planos SaaS, suporte operacional, impersonate e auditoria de candidatos.
@@ -266,6 +322,15 @@ export default function AdminUsuariosPage() {
             <span>Atualizar</span>
           </button>
         </div>
+      </div>
+
+      {/* Sub-Navegação por Abas do Módulo de Usuários */}
+      <div className="mt-4 mb-6">
+        <VelzonSubTabs
+          tabs={usuariosSubTabs}
+          activeTab={activeSubTab}
+          onTabChange={handleSwitchUserTab}
+        />
       </div>
 
       {/* KPI Stat Widgets */}
@@ -316,9 +381,8 @@ export default function AdminUsuariosPage() {
         <div className="p-4 md:p-5 border-b border-[#e9ebec] dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {/* Busca Textual */}
-            <div className="lg:col-span-2 relative">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
-              <input
+            <div className="lg:col-span-2">
+              <VelzonInput
                 type="text"
                 placeholder="Buscar por nome ou e-mail..."
                 value={search}
@@ -326,56 +390,53 @@ export default function AdminUsuariosPage() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                className="w-full pl-9 pr-3 py-2 text-xs bg-white dark:bg-slate-900 border border-[#e9ebec] dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-[#405189]"
+                leftIcon={<Search className="w-4 h-4" />}
               />
             </div>
 
             {/* Filtro por Plano */}
             <div>
-              <select
+              <VelzonSelect
                 value={tier}
                 onChange={(e) => {
                   setTier(e.target.value);
                   setPage(1);
                 }}
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-[#e9ebec] dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-[#405189]"
               >
                 <option value="all">Todos os Planos</option>
                 <option value="premium">Plano Pro (SaaS)</option>
                 <option value="free">Plano Free</option>
-              </select>
+              </VelzonSelect>
             </div>
 
             {/* Filtro por Status */}
             <div>
-              <select
+              <VelzonSelect
                 value={status}
                 onChange={(e) => {
                   setStatus(e.target.value);
                   setPage(1);
                 }}
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-[#e9ebec] dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-[#405189]"
               >
                 <option value="all">Todos os Status</option>
                 <option value="active">Ativas</option>
                 <option value="suspended">Suspensas</option>
-              </select>
+              </VelzonSelect>
             </div>
 
             {/* Filtro por Papel */}
             <div>
-              <select
+              <VelzonSelect
                 value={role}
                 onChange={(e) => {
                   setRole(e.target.value);
                   setPage(1);
                 }}
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-[#e9ebec] dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-[#405189]"
               >
                 <option value="all">Todos os Papéis</option>
                 <option value="CANDIDATE">Candidato</option>
                 <option value="ADMIN">Administrador</option>
-              </select>
+              </VelzonSelect>
             </div>
           </div>
         </div>

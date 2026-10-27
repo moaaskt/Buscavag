@@ -8,45 +8,59 @@ export class ChaworkScraper implements JobScraper {
 
   async scrape(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
-    const searchSlugs = ['desenvolvedor', 'programador', 'fullstack', 'junior'];
+    const seenUrls = new Set<string>();
+    // Chawork bloqueia ou retorna 404 em rotas com barra final (/vagas/). A URL correta é /vagas sem barra.
+    const searchSlugs = ['tecnologia', 'desenvolvedor', 'programador', 'sistemas', ''];
 
     for (const slug of searchSlugs) {
       try {
-        const url = `https://chawork.com.br/vagas/?q=${encodeURIComponent(slug)}`;
+        const url = slug
+          ? `https://chawork.com.br/vagas?q=${encodeURIComponent(slug)}`
+          : 'https://chawork.com.br/vagas';
+
         const html = await fetchHtml(url);
         const $ = cheerio.load(html);
 
-        $('.job-card, .vaga-card, article, .item-vaga, .job-listing').each((_, el) => {
-          const titleEl = $(el).find('h2 a, h3 a, .job-title a, .title a, a[href*="/vaga/"]');
-          const companyEl = $(el).find('.company, .empresa, .job-company');
-          const locationEl = $(el).find('.location, .cidade, .job-location');
-          const dateEl = $(el).find('time, .date, .data, .published');
+        $('.job-item, .job-card, .vaga-card, article').each((_, el) => {
+          const titleEl = $(el).find('.job-item-title, h2, h3, .job-title, .title');
+          const companyEl = $(el).find('.company, .empresa, .job-company, .job-item-company');
+          const locationEl = $(el).find('.job-item-location, .location, .cidade');
+          const descEl = $(el).find('.job-item-description, p');
+          const dateEl = $(el).find('.job-item-posted-at, time, .date, .data');
+          const linkEl = $(el).find('a[href*="vaga"], a.btn, a[href*="/vaga-"]').first();
 
           const title = titleEl.text().trim();
-          let href = titleEl.attr('href') || $(el).find('a').attr('href') || '';
+          let href = linkEl.attr('href') || '';
           if (!title || !href) return;
 
-          const company = companyEl.text().trim() || 'Chawork';
-          const location = locationEl.text().trim() || 'Brasil';
+          const fullUrl = href.startsWith('http')
+            ? href
+            : `https://chawork.com.br${href.startsWith('/') ? '' : '/'}${href}`;
+
+          if (seenUrls.has(fullUrl)) return;
+          seenUrls.add(fullUrl);
+
+          const company = companyEl.text().trim() || 'Chawork Partner';
+          const location = locationEl.text().replace(/\s+/g, ' ').trim() || 'Brasil';
+          const descText = descEl.text().replace(/\s+/g, ' ').trim();
+          const description = descText ? `${title} - ${descText} (${location})` : `${title} - ${company} (${location})`;
           const dateStr = dateEl.text().trim();
 
           const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 5)) return;
-
-          const fullUrl = href.startsWith('http') ? href : `https://chawork.com.br${href.startsWith('/') ? '' : '/'}${href}`;
+          if (isOlderThanDays(publishedAt, 15)) return;
 
           jobs.push({
             title,
             company,
             platform: PlatformSource.CHAWORK,
             url: fullUrl,
-            description: `${title} - ${company} (${location})`,
+            description,
             publishedAt,
             location,
           });
         });
       } catch (err) {
-        console.warn(`[ChaworkScraper] Aviso ao buscar "${slug}":`, (err as Error).message);
+        console.warn(`[ChaworkScraper] Aviso ao buscar "${slug || 'geral'}":`, (err as Error).message);
       }
     }
 

@@ -2,92 +2,79 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ScraperTerminalModal } from '@/components/ScraperTerminalModal';
-import { DashboardStats } from '@/db/repository';
-import { PlatformDistribution } from '@/components/admin/PlatformDistribution';
-import { ScraperHealthMonitor } from '@/components/admin/ScraperHealthMonitor';
 import { AdminLayout } from '@/components/admin/layout/AdminLayout';
 import { VelzonCard } from '@/components/admin/ui/VelzonCard';
 import { VelzonStatWidget } from '@/components/admin/ui/VelzonStatWidget';
 import { VelzonBadge } from '@/components/admin/ui/VelzonBadge';
+import { PlatformDistribution } from '@/components/admin/PlatformDistribution';
 import {
-  ShieldCheck,
-  Terminal,
-  Trash2,
-  Activity,
-  Database,
-  RefreshCw,
-  Server,
+  Briefcase,
+  Users,
+  Building2,
   Zap,
-  Loader2,
+  CreditCard,
+  Cpu,
+  RefreshCw,
+  ArrowRight,
+  ShieldCheck,
   CheckCircle2,
-  AlertTriangle,
+  Clock,
+  Send,
+  FileCheck,
+  Building,
+  TrendingUp,
+  BarChart3,
+  Layers,
+  Activity,
+  AlertCircle,
 } from 'lucide-react';
+import { AdminDashboardMetrics } from '@/app/api/admin/dashboard/metrics/route';
 
 export default function AdminDashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loadingStats, setLoadingStats] = useState(true);
+  const [metrics, setMetrics] = useState<AdminDashboardMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
-  // Actions states
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isPurging, setIsPurging] = useState(false);
-  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const fetchMetrics = async (silent: boolean = false) => {
+    try {
+      if (!silent) setLoading(true);
+      const res = await fetch('/api/admin/dashboard/metrics', {
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setMetrics(json.data);
+        setLastRefreshedAt(new Date());
+      }
+    } catch (err) {
+      console.error('[AdminDashboardPage] Erro ao carregar métricas executivas:', err);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    fetchStats();
+    fetchMetrics(false);
   }, []);
 
-  const fetchStats = async () => {
-    try {
-      const res = await fetch('/api/stats');
-      const data = await res.json();
-      if (data.success) {
-        setStats(data.data);
-      }
-    } catch (err) {
-      console.error('Error fetching admin stats:', err);
-    } finally {
-      setLoadingStats(false);
-    }
-  };
+  const jobs = metrics?.jobs;
+  const users = metrics?.users;
+  const companies = metrics?.companies;
+  const financial = metrics?.financial;
+  const infra = metrics?.infrastructure;
 
-  const handleSync = async () => {
-    setIsSyncing(true);
-    setIsTerminalOpen(true);
-    try {
-      await fetch('/api/admin/scraper/run', { method: 'POST' });
-    } catch (err) {
-      console.error('Failed to start sync:', err);
-    } finally {
-      setIsSyncing(false);
-      fetchStats();
-    }
-  };
+  const totalJobs = jobs?.total ?? 0;
+  const approvedJobs = jobs?.approved ?? 0;
+  const fitRate = jobs?.fitRate ?? 0;
 
-  const handlePurge = async () => {
-    if (!window.confirm('Tem certeza? Isso fará um hard delete de todas as vagas rejeitadas.')) return;
-    setIsPurging(true);
-    try {
-      const res = await fetch('/api/admin/jobs/purge-non-tech', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        alert(`Sucesso! ${data.purgedCount} vagas expurgadas.`);
-        fetchStats();
-      } else {
-        alert(`Erro: ${data.error}`);
-      }
-    } catch (err) {
-      console.error('Failed to purge:', err);
-      alert('Falha na purga.');
-    } finally {
-      setIsPurging(false);
-    }
-  };
+  // Cálculos do Kanban Pipeline
+  const pendingJobs = jobs?.statusCounts?.pending ?? 0;
+  const appliedJobs = jobs?.statusCounts?.applied ?? 0;
+  const interviewJobs = jobs?.statusCounts?.interview ?? 0;
+  const offerJobs = jobs?.statusCounts?.offer ?? 0;
+  const rejectedJobs = jobs?.statusCounts?.rejected ?? 0;
 
-  const totalJobs = stats?.totalJobs ?? 0;
-  const approvedJobs = stats?.approvedJobs ?? 0;
-  const noiseJobs = Math.max(0, totalJobs - approvedJobs);
-  const approvalRate = totalJobs ? Math.round((approvedJobs / totalJobs) * 100) : 0;
+  const activePipelineTotal = pendingJobs + appliedJobs + interviewJobs + offerJobs;
 
   return (
     <AdminLayout>
@@ -95,171 +82,371 @@ export default function AdminDashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e9ebec] dark:border-slate-800">
         <div>
           <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            Painel Geral de Operações
-            <VelzonBadge variant="primary" size="sm">
-              Velzon UI
-            </VelzonBadge>
+            <BarChart3 className="w-6 h-6 text-[#405189]" />
+            Dashboard Executiva SaaS
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
-            Infraestrutura de coleta, inteligência de triagem e saúde dos motores.
+            Visão holística de vagas, talentos, parcerias B2B, inteligência artificial e receita.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          {lastRefreshedAt && (
+            <span className="text-xs text-slate-400 font-mono hidden md:inline-block">
+              Atualizado às {lastRefreshedAt.toLocaleTimeString('pt-BR')}
+            </span>
+          )}
           <button
-            onClick={fetchStats}
-            disabled={loadingStats}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-[#e9ebec] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 transition-colors shadow-2xs"
+            onClick={() => fetchMetrics(false)}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-[#e9ebec] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors shadow-2xs cursor-pointer"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingStats ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Atualizar Métricas</span>
           </button>
         </div>
       </div>
 
-      {/* Top Stat KPI Widgets */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Grid de KPIs Executivos do SaaS (5 Widgets) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6">
+        {/* KPI 1: Vagas Ativas */}
         <VelzonStatWidget
-          title="Total Coletadas"
-          value={loadingStats ? '...' : totalJobs.toLocaleString('pt-BR')}
-          icon={<Database className="w-6 h-6" />}
+          title="Vagas no Pipeline"
+          value={loading ? '...' : totalJobs.toLocaleString('pt-BR')}
+          icon={<Briefcase className="w-6 h-6 text-[#405189]" />}
           variant="primary"
-          trend={{ value: `${Object.keys(stats?.platformCounts || {}).length} canais`, label: 'mapeados' }}
+          trend={{
+            value: `${approvedJobs.toLocaleString('pt-BR')} aprovadas`,
+            isPositive: true,
+          }}
         />
+
+        {/* KPI 2: Candidatos Cadastrados */}
         <VelzonStatWidget
-          title="Vagas Aprovadas"
-          value={loadingStats ? '...' : approvedJobs.toLocaleString('pt-BR')}
-          icon={<CheckCircle2 className="w-6 h-6" />}
+          title="Base de Talentos"
+          value={loading ? '...' : (users?.candidates ?? 0).toLocaleString('pt-BR')}
+          icon={<Users className="w-6 h-6 text-emerald-500" />}
           variant="success"
-          trend={{ value: `${approvalRate}%`, isPositive: true, label: 'taxa de fit' }}
+          trend={{
+            value: `+${users?.newLast7Days ?? 0} novos 7d`,
+            isPositive: true,
+          }}
         />
+
+        {/* KPI 3: Empresas B2B */}
         <VelzonStatWidget
-          title="Ruído / Descarte"
-          value={loadingStats ? '...' : noiseJobs.toLocaleString('pt-BR')}
-          icon={<Trash2 className="w-6 h-6" />}
-          variant="danger"
-          trend={{ value: 'Hard Delete', label: 'disponível' }}
-        />
-        <VelzonStatWidget
-          title="Eficiência IA"
-          value={loadingStats ? '...' : `${approvalRate}%`}
-          icon={<Zap className="w-6 h-6" />}
+          title="Empresas Mapeadas"
+          value={loading ? '...' : (companies?.total ?? 0).toLocaleString('pt-BR')}
+          icon={<Building2 className="w-6 h-6 text-sky-500" />}
           variant="info"
-          trend={{ value: 'Hermes AI', isPositive: true, label: 'online' }}
+          trend={{
+            value: `${companies?.activePartners ?? 0} parceiras ativas`,
+            isPositive: true,
+          }}
+        />
+
+        {/* KPI 4: Taxa de Fit da IA */}
+        <VelzonStatWidget
+          title="Taxa de Fit IA"
+          value={loading ? '...' : `${fitRate}%`}
+          icon={<Zap className="w-6 h-6 text-amber-500" />}
+          variant="warning"
+          trend={{
+            value: 'Hermes AI Engine',
+            isPositive: true,
+          }}
+        />
+
+        {/* KPI 5: MRR / Receita SaaS */}
+        <VelzonStatWidget
+          title="Receita / MRR"
+          value={
+            loading
+              ? '...'
+              : `R$ ${(financial?.mrr ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+          }
+          icon={<CreditCard className="w-6 h-6 text-indigo-500" />}
+          variant="primary"
+          trend={{
+            value: `${financial?.activeSubscribers ?? 0} assinantes`,
+            isPositive: true,
+          }}
         />
       </div>
 
-      {/* Main Grid: Operational Controls & Analytics */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Coluna Esquerda: Ações Operacionais */}
+      {/* Main Grid: Business Analytics & Infrastructure Overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
+        {/* Coluna Esquerda Principal (8 Colunas) */}
         <div className="lg:col-span-8 flex flex-col gap-6">
-          {/* Card de Controle de Infraestrutura */}
+          {/* Card Executivo de Status da Infraestrutura & Scrapers */}
           <VelzonCard
-            title="Controle de Varredura & Limpeza"
-            subtitle="Gerenciamento de disparos manuais e manutenção de disco"
+            title="Status da Coleta & Infraestrutura"
+            subtitle="Central unificada e autônoma de ingestão multi-canal"
+            className="border-t-4 border-t-[#405189]"
             badge={
-              <VelzonBadge variant="success" size="sm" icon={<ShieldCheck className="w-3 h-3" />}>
-                Sessão Ativa
+              <VelzonBadge variant="success" size="sm" icon={<Activity className="w-3 h-3" />}>
+                Operacional
               </VelzonBadge>
             }
+            actions={
+              <Link
+                href="/admin/scrapers"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-[#405189] hover:bg-[#34426f] text-white transition shadow-sm"
+              >
+                <Cpu className="w-3.5 h-3.5" />
+                <span>Central de Scrapers</span>
+                <ArrowRight className="w-3 h-3 ml-0.5" />
+              </Link>
+            }
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Sincronização */}
-              <div className="p-4 rounded-lg border border-[#e9ebec] dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 flex flex-col justify-between space-y-4">
+            <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3 font-mono text-xs">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <RefreshCw className="w-4 h-4 text-[#405189]" />
-                    <h4 className="font-semibold text-xs text-slate-800 dark:text-slate-100">
-                      Disparo de Scrapers
-                    </h4>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Inicia os scrapers ativos em paralelo via SSE stream.
-                  </p>
+                  <span className="text-slate-400 block text-[11px] uppercase">Fontes Ativas</span>
+                  <span className="text-base font-bold text-slate-800 dark:text-slate-200">
+                    {infra?.activeConnectors ?? 0} / {infra?.totalConnectors ?? 36}
+                  </span>
                 </div>
-                <button
-                  onClick={handleSync}
-                  disabled={isSyncing}
-                  className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#405189] hover:bg-[#364574] text-white text-xs font-semibold transition-colors disabled:opacity-50"
-                >
-                  {isSyncing ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  <span>Iniciar Varredura</span>
-                </button>
+                <div>
+                  <span className="text-slate-400 block text-[11px] uppercase">Fontes Saudáveis</span>
+                  <span className="text-base font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4" />
+                    {infra?.healthyCount ?? 0}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px] uppercase">Latência Média</span>
+                  <span className="text-base font-bold text-sky-600 dark:text-sky-400">
+                    {infra?.avgLatencyMs ? `${(infra.avgLatencyMs / 1000).toFixed(1)}s` : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px] uppercase">Supervisão</span>
+                  <span className="text-base font-bold text-slate-700 dark:text-slate-300">
+                    SSE Stream Ao Vivo
+                  </span>
+                </div>
               </div>
 
-              {/* Purga de Rejeitadas */}
-              <div className="p-4 rounded-lg border border-[#e9ebec] dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 flex flex-col justify-between space-y-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Trash2 className="w-4 h-4 text-rose-500" />
-                    <h4 className="font-semibold text-xs text-slate-800 dark:text-slate-100">
-                      Expurgo Imediato
-                    </h4>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Executa exclusão de vagas marcadas como ruído ou não-tech.
-                  </p>
-                </div>
-                <button
-                  onClick={handlePurge}
-                  disabled={isPurging}
-                  className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 text-xs font-semibold transition-colors disabled:opacity-50"
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-400">
+                <p className="leading-relaxed">
+                  As tarefas de varredura, monitoramento individual de latência, expurgo e terminal SSE foram centralizadas em uma tela exclusiva para máxima estabilidade.
+                </p>
+                <Link
+                  href="/admin/scrapers"
+                  className="shrink-0 text-xs font-semibold text-[#405189] dark:text-indigo-400 hover:underline flex items-center gap-1"
                 >
-                  {isPurging ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                  <span>Executar Hard Delete</span>
-                </button>
+                  Abrir Central de Scrapers &rarr;
+                </Link>
               </div>
             </div>
           </VelzonCard>
 
-          {/* Card: Monitor de Saúde dos Scrapers */}
+          {/* Card: Funil & Pipeline do Kanban Geral */}
           <VelzonCard
-            title="Monitor de Saúde dos Scrapers"
-            subtitle="Taxa de sucesso, latência e status dos conectores de coleta"
+            title="Pipeline & Funil do Kanban de Vagas"
+            subtitle="Distribuição de oportunidades por estágio de evolução"
+            actions={
+              <Link
+                href="/admin/vagas"
+                className="text-xs font-semibold text-[#405189] dark:text-indigo-400 hover:underline flex items-center gap-1"
+              >
+                Ver Todas as Vagas &rarr;
+              </Link>
+            }
           >
-            <ScraperHealthMonitor />
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
+                <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center gap-1.5 text-slate-500 mb-1">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Pendentes</span>
+                  </div>
+                  <span className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                    {pendingJobs.toLocaleString('pt-BR')}
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg bg-sky-50/60 dark:bg-sky-950/20 border border-sky-200/80 dark:border-sky-900/40">
+                  <div className="flex items-center gap-1.5 text-sky-700 dark:text-sky-300 mb-1">
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Em Processo</span>
+                  </div>
+                  <span className="text-lg font-bold text-sky-800 dark:text-sky-200">
+                    {appliedJobs.toLocaleString('pt-BR')}
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/40">
+                  <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 mb-1">
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Entrevistas</span>
+                  </div>
+                  <span className="text-lg font-bold text-amber-800 dark:text-amber-200">
+                    {interviewJobs.toLocaleString('pt-BR')}
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40">
+                  <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 mb-1">
+                    <FileCheck className="w-3.5 h-3.5" />
+                    <span>Propostas</span>
+                  </div>
+                  <span className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
+                    {offerJobs.toLocaleString('pt-BR')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Barra de Progresso Proporcional do Funil */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
+                  <span>Volume ativo em processo: {activePipelineTotal.toLocaleString('pt-BR')}</span>
+                  <span>{rejectedJobs.toLocaleString('pt-BR')} rejeitadas / arquivadas</span>
+                </div>
+                <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+                  <div
+                    style={{ width: `${activePipelineTotal ? (pendingJobs / activePipelineTotal) * 100 : 0}%` }}
+                    className="bg-slate-400"
+                    title={`Pendentes: ${pendingJobs}`}
+                  />
+                  <div
+                    style={{ width: `${activePipelineTotal ? (appliedJobs / activePipelineTotal) * 100 : 0}%` }}
+                    className="bg-sky-500"
+                    title={`Em Processo: ${appliedJobs}`}
+                  />
+                  <div
+                    style={{ width: `${activePipelineTotal ? (interviewJobs / activePipelineTotal) * 100 : 0}%` }}
+                    className="bg-amber-500"
+                    title={`Entrevistas: ${interviewJobs}`}
+                  />
+                  <div
+                    style={{ width: `${activePipelineTotal ? (offerJobs / activePipelineTotal) * 100 : 0}%` }}
+                    className="bg-emerald-500"
+                    title={`Propostas: ${offerJobs}`}
+                  />
+                </div>
+              </div>
+            </div>
+          </VelzonCard>
+
+          {/* Card: Top Empresas com Oportunidades */}
+          <VelzonCard
+            title="Top Empresas Contratantes"
+            subtitle="Organizações com maior concentração de oportunidades mapeadas"
+            actions={
+              <Link
+                href="/admin/empresas"
+                className="text-xs font-semibold text-[#405189] dark:text-indigo-400 hover:underline flex items-center gap-1"
+              >
+                Gerenciar Empresas &rarr;
+              </Link>
+            }
+          >
+            {jobs?.topCompanies && jobs.topCompanies.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {jobs.topCompanies.map((item, idx) => (
+                  <div
+                    key={item.company || idx}
+                    className="p-3 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="p-1.5 rounded-md bg-[#405189]/10 text-[#405189] dark:text-indigo-300 shrink-0">
+                        <Building className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="font-semibold text-xs text-slate-800 dark:text-slate-200 truncate" title={item.company}>
+                        {item.company}
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs font-bold text-slate-600 dark:text-slate-400 shrink-0">
+                      {item.count} vagas
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 py-4 text-center font-mono">
+                Nenhuma empresa com vagas ativas computada no momento.
+              </p>
+            )}
           </VelzonCard>
         </div>
 
-        {/* Coluna Direita: Analytics & Atalhos */}
+        {/* Coluna Direita (4 Colunas) */}
         <div className="lg:col-span-4 flex flex-col gap-6">
-          {/* Card: Distribuição por Plataforma */}
+          {/* Card: Distribuição por Canal */}
           <VelzonCard
             title="Distribuição por Canal"
             subtitle="Volume de vagas coletadas por fonte"
           >
-            {loadingStats ? (
+            {loading ? (
               <div className="py-8 flex justify-center">
                 <RefreshCw className="w-5 h-5 animate-spin text-slate-400" />
               </div>
             ) : (
-              <PlatformDistribution platformCounts={stats?.platformCounts || {}} />
+              <PlatformDistribution platformCounts={jobs?.platformCounts || {}} />
             )}
           </VelzonCard>
 
-          {/* Card: Atalho para Logs */}
+          {/* Card: Atalhos Rápidos de Gestão */}
           <VelzonCard
-            title="Auditoria & Logs do Sistema"
-            subtitle="Histórico operacional unificado"
+            title="Gestão & Operações"
+            subtitle="Atalhos diretos para os módulos administrativos"
           >
-            <div className="space-y-3">
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Acesse a trilha de eventos do sistema, tentativas de login, logs de scrapers e alertas.
-              </p>
+            <div className="space-y-2 text-xs">
+              <Link
+                href="/admin/vagas"
+                className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition group font-medium text-slate-700 dark:text-slate-200"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Briefcase className="w-4 h-4 text-[#405189]" />
+                  <span>Kanban & Disparo de Vagas</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition" />
+              </Link>
+
+              <Link
+                href="/admin/empresas"
+                className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition group font-medium text-slate-700 dark:text-slate-200"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Building2 className="w-4 h-4 text-sky-500" />
+                  <span>Módulo B2B & Empresas</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition" />
+              </Link>
+
+              <Link
+                href="/admin/usuarios"
+                className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition group font-medium text-slate-700 dark:text-slate-200"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Users className="w-4 h-4 text-emerald-500" />
+                  <span>Usuários, Planos & Suporte</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition" />
+              </Link>
+
+              <Link
+                href="/admin/pagamentos"
+                className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition group font-medium text-slate-700 dark:text-slate-200"
+              >
+                <div className="flex items-center gap-2.5">
+                  <CreditCard className="w-4 h-4 text-indigo-500" />
+                  <span>Financeiro & Assinaturas</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition" />
+              </Link>
+
               <Link
                 href="/admin/logs"
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition-colors"
+                className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition group font-medium text-slate-700 dark:text-slate-200"
               >
-                <Terminal className="w-4 h-4" />
-                <span>Abrir Central de Logs</span>
+                <div className="flex items-center gap-2.5">
+                  <Clock className="w-4 h-4 text-slate-500" />
+                  <span>Logs de Auditoria do Sistema</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition" />
               </Link>
             </div>
           </VelzonCard>
@@ -276,11 +463,6 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
-
-      <ScraperTerminalModal
-        isOpen={isTerminalOpen}
-        onClose={() => setIsTerminalOpen(false)}
-      />
     </AdminLayout>
   );
 }

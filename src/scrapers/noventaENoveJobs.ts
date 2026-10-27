@@ -7,12 +7,9 @@ export class NoventaENoveJobsScraper implements JobScraper {
   name = '99jobs';
 
   async scrape(): Promise<RawJob[]> {
-    try {
-      return await this.scrapeViaHttp();
-    } catch (err) {
-      console.warn('[99jobsScraper] HTTP falhou, tentando Playwright:', (err as Error).message);
-      return await this.scrapeViaPlaywright();
-    }
+    // 99jobs depende de renderização dinâmica no cliente via JavaScript.
+    // Inicialização direta via Playwright Stealth sem roundtrip estático prévio.
+    return await this.scrapeViaPlaywright();
   }
 
   private async scrapeViaHttp(): Promise<RawJob[]> {

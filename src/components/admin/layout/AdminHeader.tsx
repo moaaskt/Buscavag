@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LogOut,
@@ -10,6 +10,8 @@ import {
   Bell,
   Menu,
   CheckCircle2,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 interface AdminHeaderProps {
@@ -24,6 +26,36 @@ interface AdminHeaderProps {
 export function AdminHeader({ onToggleSidebar, adminUser }: AdminHeaderProps) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [isDark, setIsDark] = useState<boolean>(true);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('buscavag_theme');
+      if (stored === 'light') {
+        setIsDark(false);
+        document.documentElement.classList.remove('dark');
+      } else {
+        setIsDark(true);
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {
+      // Ignora erro em ambientes restritos de SSR
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const nextDark = !isDark;
+    setIsDark(nextDark);
+    try {
+      if (nextDark) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('buscavag_theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('buscavag_theme', 'light');
+      }
+    } catch (e) {}
+  };
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -61,6 +93,17 @@ export function AdminHeader({ onToggleSidebar, adminUser }: AdminHeaderProps) {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* Alternador de Tema Dark / Light */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title={isDark ? 'Alternar para Tema Claro' : 'Alternar para Tema Escuro'}
+          aria-label="Alternar tema de cores"
+        >
+          {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
+        </button>
+
         {/* 2FA Status Badge */}
         <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
           {adminUser?.totp_enabled ? (

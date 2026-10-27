@@ -122,17 +122,32 @@ def heuristic_cv_analysis(cv_text: str) -> Dict[str, Any]:
         detected_soft_skills = ["Trabalho em equipe", "Resolução de problemas", "Proatividade", "Autonomia"]
 
     # 3. Estimar Senioridade
+    # Prioridade 1: Declaração explícita no cabeçalho ou título profissional (primeiros 500 caracteres)
+    header_text = lower_text[:500]
     seniority = "Júnior"
-    if re.search(r"(estagi[áa]rio|est[áa]gio|trainee|iniciante)", lower_text):
-        seniority = "Estágio"
-    elif re.search(r"(especialista|tech lead|l[íi]der t[ée]cnico|principal|staff|arquiteto)", lower_text):
-        seniority = "Especialista / Tech Lead"
-    elif re.search(r"(s[êe]nior|sr\.|senior|\b5\+?\s*anos|\b6\+?\s*anos|\b7\+?\s*anos|\b8\+?\s*anos)", lower_text):
-        seniority = "Sênior"
-    elif re.search(r"(pleno|pl\.|mid-level|\b3\s*anos|\b4\s*anos)", lower_text):
-        seniority = "Pleno"
-    elif re.search(r"(j[úu]nior|jr\.|junior|\b1\s*ano|\b2\s*anos)", lower_text):
+
+    if re.search(r"\b(j[úu]nior|jr\.?|iniciante|entry[- ]level)\b", header_text):
         seniority = "Júnior"
+    elif re.search(r"\b(estagi[áa]rio|est[áa]gio|trainee)\b", header_text):
+        seniority = "Estágio"
+    elif re.search(r"\b(pleno|pl\.?|mid[- ]level)\b", header_text):
+        seniority = "Pleno"
+    elif re.search(r"\b(s[êe]nior|sr\.?|senior)\b", header_text):
+        seniority = "Sênior"
+    elif re.search(r"\b(tech lead|l[íi]der t[ée]cnico|principal engineer|staff engineer|arquiteto de software)\b", header_text):
+        seniority = "Especialista / Tech Lead"
+    else:
+        # Prioridade 2: Análise contextual no corpo do currículo
+        if re.search(r"\b(estagi[áa]rio|est[áa]gio|trainee)\b", lower_text):
+            seniority = "Estágio"
+        elif re.search(r"\b(tech lead|l[íi]der t[ée]cnico|principal engineer|staff engineer|arquiteto de software)\b", lower_text):
+            seniority = "Especialista / Tech Lead"
+        elif re.search(r"\b(s[êe]nior|sr\.?|senior|\b5\+?\s*anos|\b6\+?\s*anos|\b7\+?\s*anos|\b8\+?\s*anos)\b", lower_text):
+            seniority = "Sênior"
+        elif re.search(r"\b(pleno|pl\.?|mid[- ]level|\b3\s*anos|\b4\s*anos)\b", lower_text):
+            seniority = "Pleno"
+        elif re.search(r"\b(j[úu]nior|jr\.?|junior|\b1\s*ano|\b2\s*anos)\b", lower_text):
+            seniority = "Júnior"
 
     # 4. Estimar Cargo Principal
     detected_role = "Desenvolvedor de Software"

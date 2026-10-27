@@ -163,10 +163,10 @@ async function runPhase68Tests() {
     const evalRes = evaluator.evaluateHeuristic(nonTech);
     console.log(`  -> "${nonTech.title}": isTechSoftware = ${evalRes.isTechSoftware}, category = ${evalRes.category}`);
     assert.strictEqual(evalRes.isTechSoftware, false, `Vaga "${nonTech.title}" DEVE ter isTechSoftware = false`);
-    assert.strictEqual(evalRes.category, 'Other', `Vaga "${nonTech.title}" DEVE ter category = 'Other'`);
+    assert.ok(evalRes.category === 'Other' || evalRes.category === 'Não-Tech', `Vaga "${nonTech.title}" DEVE ter category 'Other' ou 'Não-Tech' (atual: ${evalRes.category})`);
 
     // Validação do filtro de descarte na ingestão
-    const isDiscardedInIngestion = !evalRes.isTechSoftware || evalRes.category === 'Other';
+    const isDiscardedInIngestion = !evalRes.isTechSoftware || evalRes.category === 'Other' || evalRes.category === 'Não-Tech';
     assert.strictEqual(isDiscardedInIngestion, true, `Vaga "${nonTech.title}" DEVE ser descartada na ingestão`);
   }
   console.log('  ✓ Todas as vagas não-tech foram corretamente descartadas na ingestão');

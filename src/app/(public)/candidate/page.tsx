@@ -280,6 +280,9 @@ function CandidateDashboardContent() {
 
       if (res.ok && data.success) {
         setProfileFeedback({ type: 'success', message: 'Perfil atualizado com sucesso!' });
+        setOnboardingRequired(false);
+        fetchRecommendedJobs();
+        fetchMatchStats();
         setTimeout(() => setProfileFeedback(null), 4000);
       } else {
         setProfileFeedback({ type: 'error', message: data.error || 'Erro ao salvar perfil' });
@@ -358,8 +361,32 @@ function CandidateDashboardContent() {
 
       if (res.ok && data.success) {
         setResume((prev) => (prev ? { ...prev, ai_analysis: data.analysis, analyzedAt: data.analyzedAt } : null));
-        setResumeFeedback({ type: 'success', message: 'Análise concluída com sucesso!' });
-        setTimeout(() => setResumeFeedback(null), 5000);
+
+        // Auto-sincroniza o perfil no front-end caso a API tenha retornado o perfil atualizado
+        if (data.profile) {
+          setProfile({
+            target_role: data.profile.target_role || profile.target_role,
+            seniority: data.profile.seniority || profile.seniority,
+            expected_salary: data.profile.expected_salary || profile.expected_salary,
+            preferred_work_models: data.profile.preferred_work_models || profile.preferred_work_models,
+            skills: data.profile.skills || profile.skills,
+            bio: data.profile.bio || profile.bio,
+            city: data.profile.city ?? profile.city,
+            state: data.profile.state ?? profile.state,
+          });
+        }
+
+        // Desbloqueia e recarrega imediatamente as vagas recomendadas e estatísticas de match
+        setOnboardingRequired(false);
+        fetchRecommendedJobs();
+        fetchMatchStats();
+
+        const count = data.analysis?.hard_skills?.length || 0;
+        setResumeFeedback({
+          type: 'success',
+          message: data.message || `Análise concluída com sucesso! ${count} competências sincronizadas com seu perfil.`,
+        });
+        setTimeout(() => setResumeFeedback(null), 6000);
       } else {
         setResumeFeedback({ type: 'error', message: data.error || 'Erro ao processar análise' });
       }
@@ -407,7 +434,13 @@ function CandidateDashboardContent() {
             state: data.profile.state ?? profile.state,
           });
         }
-        setSyncFeedback('Habilidades sincronizadas com o seu perfil com sucesso!');
+
+        // Desbloqueia e recarrega as vagas imediatamente
+        setOnboardingRequired(false);
+        fetchRecommendedJobs();
+        fetchMatchStats();
+
+        setSyncFeedback('Habilidades sincronizadas com o seu perfil e vagas recomendadas atualizadas!');
         setTimeout(() => setSyncFeedback(null), 4000);
       } else {
         setSyncFeedback(data.error || 'Falha ao sincronizar');

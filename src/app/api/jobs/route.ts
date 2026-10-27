@@ -17,6 +17,8 @@ export async function GET(request: NextRequest) {
     const onlyApproved = searchParams.get('onlyApproved') === 'true';
     const period = searchParams.get('period') || undefined;
     const location = searchParams.get('location') || undefined;
+    const city = searchParams.get('city') || undefined;
+    const state = searchParams.get('state') || undefined;
     const session = await getSessionUser(request);
     const userId = session?.userId;
 
@@ -30,6 +32,8 @@ export async function GET(request: NextRequest) {
       onlyApproved,
       period,
       location,
+      city,
+      state,
       userId,
     });
 

@@ -14,12 +14,9 @@ export class WorkanaScraper implements JobScraper {
   ];
 
   async scrape(): Promise<RawJob[]> {
-    try {
-      return await this.scrapeViaHttp();
-    } catch (err) {
-      console.warn('[WorkanaScraper] HTTP falhou, tentando Playwright:', (err as Error).message);
-      return await this.scrapeViaPlaywright();
-    }
+    // Workana bloqueia requisições HTTP estáticas via WAF/Cloudflare (403 Forbidden).
+    // Execução direta via Playwright Stealth para contornar proteções.
+    return await this.scrapeViaPlaywright();
   }
 
   private async scrapeViaHttp(): Promise<RawJob[]> {

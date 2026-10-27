@@ -6,6 +6,7 @@ import { VelzonCard } from '@/components/admin/ui/VelzonCard';
 import { VelzonBadge } from '@/components/admin/ui/VelzonBadge';
 import { VelzonStatWidget } from '@/components/admin/ui/VelzonStatWidget';
 import { VelzonModal } from '@/components/admin/ui/VelzonModal';
+import { VelzonInput, VelzonTextarea, VelzonSelect, VelzonLabel } from '@/components/admin/ui';
 import {
   Send,
   MessageSquare,
@@ -632,49 +633,44 @@ export default function AdminMensageriaPage() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">Título da Vaga</label>
-                        <input
+                        <VelzonLabel required>Título da Vaga</VelzonLabel>
+                        <VelzonInput
                           type="text"
                           value={pitchForm.title}
                           onChange={(e) => setPitchForm({ ...pitchForm, title: e.target.value })}
-                          className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#405189]"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">Empresa</label>
-                        <input
+                        <VelzonLabel required>Empresa</VelzonLabel>
+                        <VelzonInput
                           type="text"
                           value={pitchForm.company}
                           onChange={(e) => setPitchForm({ ...pitchForm, company: e.target.value })}
-                          className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#405189]"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">Contato Direto (Opcional)</label>
-                        <input
+                        <VelzonLabel>Contato Direto (Opcional)</VelzonLabel>
+                        <VelzonInput
                           type="text"
                           value={pitchForm.directContact}
                           onChange={(e) => setPitchForm({ ...pitchForm, directContact: e.target.value })}
-                          className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#405189]"
                           placeholder="Ex: recrutador@empresa.com"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">Nome do Candidato</label>
-                        <input
+                        <VelzonLabel required>Nome do Candidato</VelzonLabel>
+                        <VelzonInput
                           type="text"
                           value={pitchForm.candidateName}
                           onChange={(e) => setPitchForm({ ...pitchForm, candidateName: e.target.value })}
-                          className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#405189]"
                         />
                       </div>
                       <div className="sm:col-span-2">
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">Stack Real do Candidato (Separada por vírgula)</label>
-                        <input
+                        <VelzonLabel required>Stack Real do Candidato (Separada por vírgula)</VelzonLabel>
+                        <VelzonInput
                           type="text"
                           value={pitchForm.primaryStack}
                           onChange={(e) => setPitchForm({ ...pitchForm, primaryStack: e.target.value })}
-                          className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#405189]"
                         />
                       </div>
                     </div>
@@ -712,10 +708,9 @@ export default function AdminMensageriaPage() {
         {activeTab === 'historico' && (
           <div className="space-y-4">
             {/* Barra de Filtros Velzon */}
-            <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
-              <div className="relative w-full md:w-80">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
+            <div className="p-4 rounded-xl bg-white dark:bg-[#1f2430] border border-[#e9ebec] dark:border-slate-800 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
+              <div className="w-full md:w-80">
+                <VelzonInput
                   type="text"
                   placeholder="Buscar em mensagens, destinatários..."
                   value={search}
@@ -723,50 +718,50 @@ export default function AdminMensageriaPage() {
                     setSearch(e.target.value);
                     setPage(1);
                   }}
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#405189] focus:border-transparent"
+                  leftIcon={<Search className="w-4 h-4" />}
                 />
               </div>
 
               <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-500 font-medium">Canal:</span>
-                  <select
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Canal:</span>
+                  <VelzonSelect
                     value={canalFilter}
                     onChange={(e) => {
                       setCanalFilter(e.target.value as any);
                       setPage(1);
                     }}
-                    className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#405189]"
+                    className="w-36"
                   >
                     <option value="all">Todos os Canais</option>
                     <option value="telegram">Telegram</option>
                     <option value="whatsapp">WhatsApp</option>
-                  </select>
+                  </VelzonSelect>
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-500 font-medium">Status:</span>
-                  <select
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Status:</span>
+                  <VelzonSelect
                     value={statusFilter}
                     onChange={(e) => {
                       setStatusFilter(e.target.value as any);
                       setPage(1);
                     }}
-                    className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#405189]"
+                    className="w-44"
                   >
                     <option value="all">Todos os Status</option>
                     <option value="delivered">Entregues (Sucesso)</option>
                     <option value="failed">Falhas (Erros)</option>
-                  </select>
+                  </VelzonSelect>
                 </div>
               </div>
             </div>
 
             {/* Tabela Velzon */}
-            <div className="rounded-xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-xl border border-[#e9ebec] dark:border-slate-800 bg-white dark:bg-[#1f2430] shadow-xs overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-[#f8f9fa] text-slate-500 border-b border-slate-200 font-semibold uppercase tracking-wider">
+                  <thead className="bg-[#f8f9fa] dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-b border-[#e9ebec] dark:border-slate-800 font-semibold uppercase tracking-wider">
                     <tr>
                       <th className="py-3 px-4">Canal</th>
                       <th className="py-3 px-4">Destinatário</th>
@@ -886,15 +881,15 @@ export default function AdminMensageriaPage() {
         >
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Canal de Destino</label>
+              <VelzonLabel required>Canal de Destino</VelzonLabel>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setTestCanal('telegram')}
                   className={`py-2 px-3 rounded-lg text-xs font-semibold border flex items-center justify-center gap-2 transition-all ${
                     testCanal === 'telegram'
-                      ? 'border-[#405189] bg-indigo-50 text-[#405189]'
-                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      ? 'border-[#405189] bg-indigo-50 dark:bg-indigo-950/40 text-[#405189] dark:text-indigo-300'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
                   <Bot className="w-4 h-4" />
@@ -905,8 +900,8 @@ export default function AdminMensageriaPage() {
                   onClick={() => setTestCanal('whatsapp')}
                   className={`py-2 px-3 rounded-lg text-xs font-semibold border flex items-center justify-center gap-2 transition-all ${
                     testCanal === 'whatsapp'
-                      ? 'border-[#405189] bg-indigo-50 text-[#405189]'
-                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      ? 'border-[#405189] bg-indigo-50 dark:bg-indigo-950/40 text-[#405189] dark:text-indigo-300'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
                   <MessageSquare className="w-4 h-4" />
@@ -916,25 +911,24 @@ export default function AdminMensageriaPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <VelzonLabel>
                 Destinatário (Chat ID ou Telefone com DDI/DDD)
-              </label>
-              <input
+              </VelzonLabel>
+              <VelzonInput
                 type="text"
                 value={testDestinatario}
                 onChange={(e) => setTestDestinatario(e.target.value)}
                 placeholder={testCanal === 'telegram' ? 'Deixe vazio para canal padrão' : 'Ex: 5511999998888'}
-                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#405189]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Texto da Mensagem</label>
-              <textarea
+              <VelzonLabel required>Texto da Mensagem</VelzonLabel>
+              <VelzonTextarea
                 rows={4}
                 value={testMensagem}
                 onChange={(e) => setTestMensagem(e.target.value)}
-                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#405189]"
+                placeholder="Digite a mensagem de teste..."
               />
             </div>
 

@@ -8,14 +8,16 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     let runId = '';
+    let scraperName = '';
     try {
       const body = await request.json();
       runId = body?.runId || '';
+      scraperName = body?.scraperName || '';
     } catch {
       // Body vazio é aceitável
     }
 
-    const logger = new ScraperLogger('Pipeline', runId || undefined);
+    const logger = new ScraperLogger(scraperName || 'Pipeline', runId || undefined);
     const resolvedRunId = logger.getRunId();
 
     const cwd = process.cwd();
@@ -24,18 +26,29 @@ export async function POST(request: NextRequest) {
       ...process.env,
       PATH: `${nodeModulesBin}:${process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'}`,
       SCRAPER_RUN_ID: resolvedRunId,
+      SCRAPER_TARGET: scraperName || '',
       PYTHONUNBUFFERED: '1',
       PYTHONIOENCODING: 'utf-8',
     };
 
     // Emite log inicial informando disparo do processo autônomo
-    logger.info('Iniciando pipeline de scraper via processo isolado...', {
-      step: 'START',
-      data: { runId: resolvedRunId },
-    });
+    logger.info(
+      scraperName
+        ? `Iniciando conector individual [${scraperName}] via processo isolado...`
+        : 'Iniciando pipeline de scraper completo via processo isolado...',
+      {
+        step: 'START',
+        data: { runId: resolvedRunId, scraperName: scraperName || 'ALL' },
+      }
+    );
+
+    const spawnArgs = ['tsx', 'src/index.ts'];
+    if (scraperName) {
+      spawnArgs.push('--scraper', scraperName);
+    }
 
     // Spawn do processo via npx tsx para execução direta no runtime
-    const child = spawn('npx', ['tsx', 'src/index.ts'], {
+    const child = spawn('npx', spawnArgs, {
       cwd,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],

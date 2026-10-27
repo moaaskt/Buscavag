@@ -164,7 +164,23 @@ export class ScraperOrchestrator {
     this.logger = options?.logger || new ScraperLogger('Orchestrator');
   }
 
-  async runAll(): Promise<RawJob[]> {
+  async runAll(targetScraperName?: string): Promise<RawJob[]> {
+    const scrapersToRun = targetScraperName
+      ? this.scrapers.filter(
+          (s) =>
+            s.name.toLowerCase() === targetScraperName.toLowerCase() ||
+            s.name.toLowerCase().includes(targetScraperName.toLowerCase())
+        )
+      : this.scrapers;
+
+    if (scrapersToRun.length === 0) {
+      this.logger.warn(`Nenhum conector encontrado com o nome "${targetScraperName}".`, {
+        step: 'PROGRESS',
+        data: { target: targetScraperName },
+      });
+      return [];
+    }
+
     // Checagem de disponibilidade do microserviço Python Scrapling Engine
     const isPythonAvailable = await this.pythonBridge.isAvailable();
     if (isPythonAvailable) {
@@ -179,17 +195,21 @@ export class ScraperOrchestrator {
       });
     }
 
-
-    this.logger.info(`Iniciando execução paralela de ${this.scrapers.length} scrapers (Concorrência: ${this.concurrency}, Timeout: ${this.timeoutPerScraperMs / 1000}s)...`, {
-      step: 'START',
-      data: { totalScrapers: this.scrapers.length, concurrency: this.concurrency, pythonEngineOnline: isPythonAvailable },
-    });
+    this.logger.info(
+      targetScraperName
+        ? `Iniciando execução individual do conector "${scrapersToRun[0].name}"...`
+        : `Iniciando execução paralela de ${scrapersToRun.length} scrapers (Concorrência: ${this.concurrency}, Timeout: ${this.timeoutPerScraperMs / 1000}s)...`,
+      {
+        step: 'START',
+        data: { totalScrapers: scrapersToRun.length, concurrency: this.concurrency, pythonEngineOnline: isPythonAvailable },
+      }
+    );
 
     const startTime = Date.now();
     const metrics: ScraperExecutionMetric[] = [];
     const allJobs: RawJob[] = [];
 
-    const results = await runWithConcurrencyLimit(this.scrapers, this.concurrency, async (scraper) => {
+    const results = await runWithConcurrencyLimit(scrapersToRun, this.concurrency, async (scraper) => {
       const scraperLogger = this.logger.forScraper(scraper.name);
       const scraperStart = Date.now();
       

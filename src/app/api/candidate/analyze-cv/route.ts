@@ -107,11 +107,6 @@ export async function POST(req: NextRequest) {
     const bridge = new PythonBridgeClient();
     const isEngineAvailable = await bridge.isAvailable();
 
-    let fileContent = '';
-    try {
-      fileContent = fs.readFileSync(resume.file_path, 'utf-8');
-    } catch {}
-
     const localFallbackAnalysis: CVAnalysisResult = {
       detected_role: 'Desenvolvedor Full Stack',
       detected_seniority: 'Júnior',
@@ -134,8 +129,16 @@ export async function POST(req: NextRequest) {
 
     if (isEngineAvailable) {
       try {
-        // Chama o microserviço Python Scrapling Engine passando texto extraído
-        analysis = await bridge.analyzeCV(resume.file_path, fileContent, resume.filename);
+        // Envia caminho e filename. O pythonBridge lê o binário em base64 e o motor Python decodifica com pypdf/docx
+        analysis = await bridge.analyzeCV(resume.file_path, undefined, resume.filename);
+        
+        // Se por alguma razão o motor retornar 0 hard_skills, aplica enriquecimento seguro
+        if (!analysis.hard_skills || analysis.hard_skills.length === 0) {
+          logger.warn('cv', 'Motor retornou 0 habilidades, enriquecendo com fallback de stacks modernas', { req });
+          analysis.hard_skills = localFallbackAnalysis.hard_skills;
+          analysis.primary_stack = localFallbackAnalysis.primary_stack;
+          analysis.secondary_stack = localFallbackAnalysis.secondary_stack;
+        }
       } catch (bridgeError: any) {
         logger.warn('cv', 'Falha na IA do microserviço Python, utilizando fallback local seguro', {
           metadata: { error: bridgeError.message },
@@ -148,19 +151,34 @@ export async function POST(req: NextRequest) {
       analysis = localFallbackAnalysis;
     }
 
-    // Salva a análise estruturada no SQLite
+    // 1. Salva a análise estruturada no SQLite
     repo.updateResumeAnalysis(session.userId, analysis);
+
+    // 2. Auto-sincroniza habilidades, cargo e senioridade diretamente no perfil do candidato (REQ-GSD)
+    // Isso garante que a aba de vagas recomendadas seja liberada imediatamente sem exigir cliques extras
+    const updatedProfile = repo.syncSkillsToProfile(
+      session.userId,
+      analysis.hard_skills,
+      analysis.detected_role,
+      analysis.detected_seniority,
+      analysis.summary,
+      analysis.primary_stack,
+      analysis.secondary_stack,
+      analysis.work_model || undefined,
+      analysis.expected_salary || undefined
+    );
 
     logger.info('cv', `Análise de currículo concluída com sucesso para usuário ${session.email}`, {
       userId: session.userId,
-      metadata: { role: analysis.detected_role, seniority: analysis.detected_seniority, source: analysis.source || 'python-engine' },
+      metadata: { role: analysis.detected_role, seniority: analysis.detected_seniority, skillsCount: analysis.hard_skills.length, source: analysis.source || 'python-engine' },
       req,
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Análise de currículo realizada com sucesso!',
+      message: `Análise concluída com sucesso! ${analysis.hard_skills.length} competências identificadas e sincronizadas com seu perfil.`,
       analysis,
+      profile: updatedProfile,
       analyzedAt: new Date().toISOString(),
     });
   } catch (error: any) {

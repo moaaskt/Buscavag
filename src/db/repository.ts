@@ -1,6 +1,8 @@
 import { db, initDatabase } from './index';
 import { ProcessedJob, RawJob } from '../types/job';
 import { generateJobHash } from '../utils/hash';
+import { generateJobFingerprint } from '../utils/fingerprint';
+import { parseCanonicalLocation } from '../utils/geoParser';
 import { EvaluationResult } from '../services/hermesEvaluator';
 import { TITLE_BLACKLIST } from '../config/jobFilters';
 
@@ -13,6 +15,8 @@ export interface JobFilterOptions {
   onlyApproved?: boolean;
   period?: string;
   location?: string;
+  city?: string;
+  state?: string;
   userId?: string;
   adminMode?: boolean;
   jobStatus?: string;
@@ -34,10 +38,17 @@ export class JobRepository {
     initDatabase();
   }
 
-  public exists(url: string, company: string, title: string, platform?: string): boolean {
+  public exists(
+    url: string,
+    company: string,
+    title: string,
+    platform?: string,
+    location?: string | null
+  ): boolean {
     const id = generateJobHash(url, company, title, platform);
-    const stmt = db.prepare('SELECT 1 FROM jobs WHERE id = ? OR url = ?');
-    const result = stmt.get(id, url);
+    const fingerprint = generateJobFingerprint(title, company, location);
+    const stmt = db.prepare('SELECT 1 FROM jobs WHERE id = ? OR url = ? OR fingerprint = ?');
+    const result = stmt.get(id, url, fingerprint);
     return !!result;
   }
 
@@ -95,6 +106,16 @@ export class JobRepository {
     }
 
     const applicationStatus = isJunior ? 'pending' : 'rejected';
+    const canonicalGeo = parseCanonicalLocation(
+      rawJob.location,
+      rawJob.platform,
+      rawJob.title,
+      rawJob.description
+    );
+    const city = rawJob.city || canonicalGeo.city || null;
+    const state = rawJob.state || canonicalGeo.state || null;
+    const location = canonicalGeo.canonicalLocation || rawJob.location || null;
+    const fingerprint = generateJobFingerprint(rawJob.title, rawJob.company, location);
 
     const stmt = db.prepare(`
       INSERT INTO jobs (
@@ -102,8 +123,9 @@ export class JobRepository {
         is_junior_fullstack, score_ia, overall_score, stack_score, seniority_score,
         location_score, category, gaps, resume_tips, application_status, ai_reasoning, notified, created_at,
         extracted_role, contract_type, application_channel, salary, direct_contact,
-        required_seniority, tech_stack, work_model, is_tech_software
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        required_seniority, tech_stack, work_model, is_tech_software, fingerprint,
+        city, state
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO NOTHING
     `);
 
@@ -136,12 +158,19 @@ export class JobRepository {
       requiredSeniority,
       JSON.stringify(techStack),
       workModel,
-      isTechSoftware
+      isTechSoftware,
+      fingerprint,
+      city,
+      state
     );
 
     return {
       ...rawJob,
       id,
+      fingerprint,
+      city: city || undefined,
+      state: state || undefined,
+      location: location || undefined,
       isJuniorFullStack: isJunior,
       scoreIa: overallScore,
       overallScore,
@@ -188,6 +217,13 @@ export class JobRepository {
   public getJobById(id: string): ProcessedJob | null {
     const stmt = db.prepare('SELECT * FROM jobs WHERE id = ?');
     const row = stmt.get(id) as any;
+    if (!row) return null;
+    return this.mapRowToJob(row);
+  }
+
+  public findByFingerprint(fingerprint: string): ProcessedJob | null {
+    const stmt = db.prepare('SELECT * FROM jobs WHERE fingerprint = ?');
+    const row = stmt.get(fingerprint) as any;
     if (!row) return null;
     return this.mapRowToJob(row);
   }
@@ -290,19 +326,55 @@ export class JobRepository {
       }
     }
 
+    if (filters?.city && filters.city !== 'all') {
+      sql += ' AND city = ?';
+      params.push(filters.city);
+    }
+
+    if (filters?.state && filters.state !== 'all') {
+      sql += " AND (state = ? OR (state IS NULL AND LOWER(location) LIKE '%remoto%'))";
+      params.push(filters.state.toUpperCase());
+    }
+
     if (filters?.location && filters.location !== 'all') {
       const loc = filters.location.trim().toLowerCase();
       if (loc === 'remoto') {
         sql += " AND (LOWER(location) LIKE '%remoto%' OR LOWER(location) LIKE '%remote%' OR LOWER(location) LIKE '%home office%' OR LOWER(location) LIKE '%teletrabalho%' OR LOWER(location) LIKE '%brasil%' OR location IS NULL OR location = '')";
+      } else if (loc === 'sc' || loc === 'santa catarina') {
+        sql += " AND (state = 'SC' OR (state IS NULL AND LOWER(location) LIKE '%remoto%'))";
+      } else if (loc === 'sp' || loc === 'sao paulo' || loc === 'são paulo') {
+        sql += " AND (state = 'SP' OR (state IS NULL AND LOWER(location) LIKE '%remoto%'))";
+      } else if (loc === 'pr' || loc === 'parana' || loc === 'paraná') {
+        sql += " AND (state = 'PR' OR (state IS NULL AND LOWER(location) LIKE '%remoto%'))";
+      } else if (loc === 'rj' || loc === 'rio de janeiro') {
+        sql += " AND (state = 'RJ' OR (state IS NULL AND LOWER(location) LIKE '%remoto%'))";
+      } else if (loc === 'mg' || loc === 'minas gerais') {
+        sql += " AND (state = 'MG' OR (state IS NULL AND LOWER(location) LIKE '%remoto%'))";
+      } else if (loc === 'rs' || loc === 'rio grande do sul') {
+        sql += " AND (state = 'RS' OR (state IS NULL AND LOWER(location) LIKE '%remoto%'))";
+      } else if (loc === 'df' || loc === 'brasilia' || loc === 'brasília') {
+        sql += " AND (city = 'Brasília' OR state = 'DF')";
       } else if (loc === 'florianopolis' || loc === 'floripa') {
-        sql += " AND (LOWER(location) LIKE '%florianópolis%' OR LOWER(location) LIKE '%florianopolis%' OR LOWER(location) LIKE '%floripa%')";
+        sql += " AND (city = 'Florianópolis' OR LOWER(location) LIKE '%florianópolis%' OR LOWER(location) LIKE '%florianopolis%' OR LOWER(location) LIKE '%floripa%')";
       } else if (loc === 'palhoca') {
-        sql += " AND (LOWER(location) LIKE '%palhoça%' OR LOWER(location) LIKE '%palhoca%')";
-      } else if (loc === 'sao_jose') {
-        sql += " AND (LOWER(location) LIKE '%são josé%' OR LOWER(location) LIKE '%sao jose%') AND LOWER(location) NOT LIKE '%campos%'";
+        sql += " AND (city = 'Palhoça' OR LOWER(location) LIKE '%palhoça%' OR LOWER(location) LIKE '%palhoca%')";
+      } else if (loc === 'sao_jose' || loc === 'sao jose') {
+        sql += " AND (city = 'São José' OR (LOWER(location) LIKE '%são josé%' AND LOWER(location) NOT LIKE '%campos%'))";
+      } else if (loc === 'joinville') {
+        sql += " AND (city = 'Joinville' OR LOWER(location) LIKE '%joinville%')";
+      } else if (loc === 'blumenau') {
+        sql += " AND (city = 'Blumenau' OR LOWER(location) LIKE '%blumenau%')";
+      } else if (loc === 'balneario_camboriu' || loc === 'itajaí' || loc === 'itajai') {
+        sql += " AND (city IN ('Balneário Camboriú', 'Itajaí') OR LOWER(location) LIKE '%balneário camboriú%' OR LOWER(location) LIKE '%itajaí%' OR LOWER(location) LIKE '%itajai%')";
+      } else if (loc === 'curitiba') {
+        sql += " AND (city = 'Curitiba' OR LOWER(location) LIKE '%curitiba%')";
+      } else if (loc === 'porto_alegre') {
+        sql += " AND (city = 'Porto Alegre' OR LOWER(location) LIKE '%porto alegre%')";
+      } else if (loc === 'belo_horizonte') {
+        sql += " AND (city = 'Belo Horizonte' OR LOWER(location) LIKE '%belo horizonte%')";
       } else {
-        sql += ' AND LOWER(location) LIKE ?';
-        params.push(`%${loc}%`);
+        sql += ' AND (city = ? OR state = ? OR LOWER(location) LIKE ?)';
+        params.push(loc, loc.toUpperCase(), `%${loc}%`);
       }
     }
 
@@ -381,6 +453,8 @@ export class JobRepository {
       description: row.description,
       publishedAt: new Date(row.published_at),
       location: row.location || undefined,
+      city: row.city || undefined,
+      state: row.state || undefined,
       isJuniorFullStack: Boolean(row.is_junior_fullstack),
       scoreIa: row.overall_score || row.score_ia || 0,
       overallScore: row.overall_score || row.score_ia || 0,
@@ -407,6 +481,7 @@ export class JobRepository {
       })(),
       workModel: row.work_model || undefined,
       isTechSoftware: Boolean(row.is_tech_software ?? 1),
+      fingerprint: row.fingerprint || undefined,
       status: row.status || 'active',
       notified: Boolean(row.notified),
       createdAt: new Date(row.created_at),

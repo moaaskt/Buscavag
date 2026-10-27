@@ -17,7 +17,10 @@
     "test:phase8": "tsx src/test-phase8.ts",
     "test:whatsapp": "tsx src/test-whatsapp.ts",
     "test:fb": "tsx scripts/test-facebook-groups.ts",
-    "audit:scrapers": "tsx scripts/audit-scrapers.ts"
+    "audit:scrapers": "tsx scripts/audit-scrapers.ts",
+    "clean:ports": "fuser -k 3000/tcp 2>/dev/null || true",
+    "kill:zombies": "pkill -f 'next dev|tsx' 2>/dev/null || fuser -k 3000/tcp 2>/dev/null || true",
+    "clean:all": "npm run kill:zombies && npm run clean:ports"
   },
   "keywords": [],
   "author": "",

@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import fs from 'fs';
 import { RawJob, PlatformSource } from '../types/job.js';
 
 export interface PythonScrapeOptions {
@@ -130,9 +131,20 @@ export class PythonBridgeClient {
    */
   async parseCV(filePath: string, filename?: string): Promise<PythonCVParseResponse> {
     try {
+      let contentBase64: string | undefined = undefined;
+      if (filePath && fs.existsSync(filePath)) {
+        try {
+          const buffer = fs.readFileSync(filePath);
+          contentBase64 = buffer.toString('base64');
+        } catch (readErr) {
+          console.warn('[PythonBridgeClient] Falha ao ler buffer para base64:', readErr);
+        }
+      }
+
       const response = await this.client.post<PythonCVParseResponse>('/cv/parse', {
         filePath,
         filename,
+        contentBase64,
       });
       return response.data;
     } catch (err) {
@@ -146,9 +158,23 @@ export class PythonBridgeClient {
    */
   async analyzeCV(filePath?: string, cvText?: string, filename?: string): Promise<PythonCVAnalysisData> {
     try {
+      let resolvedText = cvText?.trim() || '';
+
+      // Se não há texto pré-extraído, mas há arquivo, extrai texto primeiro via parseCV com base64
+      if (!resolvedText && filePath && fs.existsSync(filePath)) {
+        try {
+          const parsed = await this.parseCV(filePath, filename);
+          if (parsed.success && parsed.text && parsed.text.trim()) {
+            resolvedText = parsed.text.trim();
+          }
+        } catch (parseErr) {
+          console.warn('[PythonBridgeClient] parseCV falhou antes do analyzeCV:', parseErr);
+        }
+      }
+
       const response = await this.client.post<PythonCVAnalyzeResponse>('/cv/analyze', {
         filePath,
-        cvText,
+        cvText: resolvedText || undefined,
         filename,
       });
 

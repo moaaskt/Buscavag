@@ -9,12 +9,21 @@ import { ScraperLogger } from './services/scraperLogger.js';
 
 dotenv.config();
 
-export async function runPipeline(customLogger?: ScraperLogger) {
-  const logger = customLogger || new ScraperLogger('Pipeline');
-  logger.info(`Iniciando pipeline autônomo de monitoramento de vagas...`, { step: 'START' });
+export async function runPipeline(customLogger?: ScraperLogger, targetScraperName?: string) {
+  const target = targetScraperName || process.env.SCRAPER_TARGET || undefined;
+  const logger = customLogger || new ScraperLogger(target || 'Pipeline');
+  logger.info(
+    target
+      ? `Iniciando execução individual do conector "${target}"...`
+      : 'Iniciando pipeline autônomo de monitoramento de vagas...',
+    { step: 'START', data: { target: target || 'ALL' } }
+  );
 
   console.log(`\n======================================================`);
   console.log(`  BUSCAVAG - PIPELINE AUTÔNOMO DE MONITORAMENTO DE VAGAS`);
+  if (target) {
+    console.log(`  Alvo Selecionado: ${target}`);
+  }
   console.log(`  Executado em: ${new Date().toLocaleString('pt-BR')}`);
   console.log(`======================================================\n`);
 
@@ -23,10 +32,13 @@ export async function runPipeline(customLogger?: ScraperLogger) {
   const repo = new JobRepository();
   const evaluator = new HermesEvaluator();
 
-  // 1. Coleta de vagas de todas as fontes
-  console.log('[1/4] Coletando vagas dos conectores...');
-  logger.info('[1/4] Coletando vagas dos 24+ conectores...', { step: 'PROGRESS' });
-  const rawJobs = await orchestrator.runAll();
+  // 1. Coleta de vagas
+  console.log(target ? `[1/4] Coletando vagas do conector ${target}...` : '[1/4] Coletando vagas dos conectores...');
+  logger.info(
+    target ? `[1/4] Coletando vagas do conector ${target}...` : '[1/4] Coletando vagas dos 24+ conectores...',
+    { step: 'PROGRESS', data: { target: target || 'ALL' } }
+  );
+  const rawJobs = await orchestrator.runAll(target);
   console.log(`-> Total de vagas coletadas: ${rawJobs.length}`);
 
   // 2. Filtragem de duplicadas, limiar de data (5 dias) e filtros não-tech
@@ -37,6 +49,7 @@ export async function runPipeline(customLogger?: ScraperLogger) {
   let approvedCount = 0;
   let blacklistFilteredCount = 0;
   let whitelistFilteredCount = 0;
+  let duplicateFilteredCount = 0;
   let discardedNonTechCount = 0;
 
   for (const job of rawJobs) {
@@ -70,46 +83,57 @@ export async function runPipeline(customLogger?: ScraperLogger) {
       continue;
     }
 
-    if (!repo.exists(job.url, job.company, job.title, job.platform)) {
-      newJobsCount++;
-
-      // 3. Avaliação semântica via Hermes Agent / IA
-      console.log(` -> Avaliando vaga: "${job.title}" | ${job.company}`);
-      const evalResult = await evaluator.evaluate(job);
-      evaluatedCount++;
-
-      // REGRA DE INGESTÃO MULTI-TENANT (Fase 68):
-      // Descartar apenas se NÃO for vaga de tecnologia/software ou se for classificada como 'Other'
-      if (!evalResult.isTechSoftware || evalResult.category === 'Other') {
-        discardedNonTechCount++;
-        const msg = `[INGESTÃO DESCARTADA (NÃO-TECH)] "${job.title}" (${job.company}) - Categoria: ${evalResult.category} | ${evalResult.reasoning}`;
-        console.log(`   ${msg}`);
-        logger.info(msg, {
-          step: 'PROGRESS',
-          data: { title: job.title, company: job.company, filter: 'non_tech', category: evalResult.category },
-        });
-        continue;
-      }
-
-      approvedCount++;
-      const topStacks = evalResult.techStack && evalResult.techStack.length > 0 ? evalResult.techStack.slice(0, 3).join(', ') : 'Gerais';
-      const msg = `[INGESTÃO APROVADA TECH] "${job.title}" (${job.company}) Nível: ${evalResult.requiredSeniority || 'Não especificado'} | Stacks: ${topStacks}`;
-      console.log(`   ${msg} [${evalResult.category}] | ${evalResult.reasoning}`);
+    // Filtro 3: Deduplicação Multi-Fonte via Fingerprint & URL
+    if (repo.exists(job.url, job.company, job.title, job.platform, job.location)) {
+      duplicateFilteredCount++;
+      const msg = `[DEDUPLICAÇÃO FINGERPRINT] Vaga já cadastrada via outra fonte ou URL: "${job.title}" (${job.company})`;
+      console.log(`   ${msg}`);
       logger.info(msg, {
         step: 'PROGRESS',
-        data: { title: job.title, company: job.company, seniority: evalResult.requiredSeniority || 'Não especificado', category: evalResult.category },
+        data: { title: job.title, company: job.company, filter: 'duplicate' },
       });
-
-      // Inserir no banco de dados com análise enriquecida neutra
-      repo.insert(job, evalResult);
+      continue;
     }
+
+    newJobsCount++;
+
+    // 3. Avaliação semântica via Hermes Agent / IA
+    console.log(` -> Avaliando vaga: "${job.title}" | ${job.company}`);
+    const evalResult = await evaluator.evaluate(job);
+    evaluatedCount++;
+
+    // REGRA DE INGESTÃO MULTI-TENANT (Fases 68 & 91):
+    // Descartar apenas se NÃO for vaga de tecnologia/software ou se for classificada como 'Other' ou 'Não-Tech'
+    if (!evalResult.isTechSoftware || evalResult.category === 'Other' || evalResult.category === 'Não-Tech') {
+      discardedNonTechCount++;
+      const msg = `[INGESTÃO DESCARTADA (NÃO-TECH)] "${job.title}" (${job.company}) - Categoria: ${evalResult.category} | ${evalResult.reasoning}`;
+      console.log(`   ${msg}`);
+      logger.info(msg, {
+        step: 'PROGRESS',
+        data: { title: job.title, company: job.company, filter: 'non_tech', category: evalResult.category },
+      });
+      continue;
+    }
+
+    approvedCount++;
+    const topStacks = evalResult.techStack && evalResult.techStack.length > 0 ? evalResult.techStack.slice(0, 3).join(', ') : 'Gerais';
+    const msg = `[INGESTÃO APROVADA TECH] "${job.title}" (${job.company}) Nível: ${evalResult.requiredSeniority || 'Não especificado'} | Stacks: ${topStacks}`;
+    console.log(`   ${msg} [${evalResult.category}] | ${evalResult.reasoning}`);
+    logger.info(msg, {
+      step: 'PROGRESS',
+      data: { title: job.title, company: job.company, seniority: evalResult.requiredSeniority || 'Não especificado', category: evalResult.category },
+    });
+
+    // Inserir no banco de dados com análise enriquecida neutra
+    repo.insert(job, evalResult);
   }
 
-  const statsMsg = `Estatísticas do ciclo: ${rawJobs.length} coletadas, ${blacklistFilteredCount + whitelistFilteredCount} pré-filtradas, ${evaluatedCount} avaliadas, ${discardedNonTechCount} descartadas por não-tech, ${approvedCount} aprovadas no DB.`;
+  const statsMsg = `Estatísticas do ciclo: ${rawJobs.length} coletadas, ${blacklistFilteredCount + whitelistFilteredCount} pré-filtradas, ${duplicateFilteredCount} duplicadas descartadas, ${evaluatedCount} avaliadas, ${discardedNonTechCount} descartadas por não-tech, ${approvedCount} aprovadas no DB.`;
   console.log(`\nEstatísticas do ciclo:`);
   console.log(`- Vagas totais coletadas: ${rawJobs.length}`);
   console.log(`- Descartadas por blacklist de cargo: ${blacklistFilteredCount}`);
   console.log(`- Descartadas por falta de termo tech: ${whitelistFilteredCount}`);
+  console.log(`- Descartadas por duplicidade (Fingerprint/URL): ${duplicateFilteredCount}`);
   console.log(`- Vagas novas avaliadas pela IA: ${evaluatedCount}`);
   console.log(`- Vagas descartadas por não serem de TI: ${discardedNonTechCount}`);
   console.log(`- Vagas técnicas armazenadas no banco: ${approvedCount}`);
@@ -119,6 +143,7 @@ export async function runPipeline(customLogger?: ScraperLogger) {
       totalCollected: rawJobs.length,
       blacklistFiltered: blacklistFilteredCount,
       whitelistFiltered: whitelistFilteredCount,
+      duplicateFiltered: duplicateFilteredCount,
       evaluated: evaluatedCount,
       discardedNonTech: discardedNonTechCount,
       approved: approvedCount,
@@ -164,8 +189,11 @@ export async function runPipeline(customLogger?: ScraperLogger) {
 // Execução direta quando rodado como script principal
 const isDirectRun = process.argv[1]?.includes('index');
 if (isDirectRun) {
+  const args = process.argv.slice(2);
+  const scraperArgIdx = args.indexOf('--scraper');
+  const cliTarget = scraperArgIdx !== -1 && args[scraperArgIdx + 1] ? args[scraperArgIdx + 1] : process.env.SCRAPER_TARGET;
   const notifier = new TelegramNotifier();
-  runPipeline().catch(async (err) => {
+  runPipeline(undefined, cliTarget).catch(async (err) => {
     console.error('[ERRO CRÍTICO NO PIPELINE]:', err);
     const errorMsg = (err as Error).message || String(err);
     await notifier.sendAlert(`🚨 [ERRO CRÍTICO] O pipeline principal falhou: ${errorMsg}`);

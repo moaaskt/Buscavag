@@ -6,6 +6,7 @@ import { VelzonCard } from '@/components/admin/ui/VelzonCard';
 import { VelzonBadge } from '@/components/admin/ui/VelzonBadge';
 import { VelzonStatWidget } from '@/components/admin/ui/VelzonStatWidget';
 import { VelzonModal } from '@/components/admin/ui/VelzonModal';
+import { VelzonInput, VelzonSelect } from '@/components/admin/ui';
 import {
   ScrollText,
   Search,
@@ -168,11 +169,8 @@ export default function AdminLogsPage() {
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e9ebec] dark:border-slate-800">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-2">
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100">
             Central Unificada de Logs & Auditoria
-            <VelzonBadge variant="primary" size="sm">
-              Phase 77
-            </VelzonBadge>
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">
             Rastreamento integrado de eventos de sistema, ações de operadores e mensageria.
@@ -232,9 +230,8 @@ export default function AdminLogsPage() {
         <div className="p-4 md:p-5 border-b border-[#e9ebec] dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
             {/* Busca Textual */}
-            <div className="lg:col-span-2 relative">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
-              <input
+            <div className="lg:col-span-2">
+              <VelzonInput
                 type="text"
                 placeholder="Buscar por mensagem ou origem..."
                 value={search}
@@ -242,54 +239,51 @@ export default function AdminLogsPage() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                className="w-full pl-9 pr-3 py-2 text-xs bg-white dark:bg-slate-900 border border-[#e9ebec] dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-[#405189]"
+                leftIcon={<Search className="w-4 h-4" />}
               />
             </div>
 
             {/* Filtro de Tipo */}
             <div>
-              <select
+              <VelzonSelect
                 value={tipo}
                 onChange={(e) => {
                   setTipo(e.target.value as any);
                   setPage(1);
                 }}
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-[#e9ebec] dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-[#405189]"
               >
                 <option value="ALL">Todos os Tipos</option>
                 <option value="sistema">Sistema</option>
                 <option value="acao">Ações Admin</option>
                 <option value="mensageria">Mensageria</option>
-              </select>
+              </VelzonSelect>
             </div>
 
             {/* Filtro de Nível */}
             <div>
-              <select
+              <VelzonSelect
                 value={nivel}
                 onChange={(e) => {
                   setNivel(e.target.value as any);
                   setPage(1);
                 }}
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-[#e9ebec] dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-[#405189]"
               >
                 <option value="ALL">Todos os Níveis</option>
                 <option value="info">Info</option>
                 <option value="warning">Avisos</option>
                 <option value="error">Erros</option>
                 <option value="security">Segurança</option>
-              </select>
+              </VelzonSelect>
             </div>
 
-            {/* Dropdown Dinâmico de Origem (Refinamento #2) */}
+            {/* Dropdown Dinâmico de Origem */}
             <div>
-              <select
+              <VelzonSelect
                 value={origem}
                 onChange={(e) => {
                   setOrigem(e.target.value);
                   setPage(1);
                 }}
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-[#e9ebec] dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-[#405189]"
               >
                 <option value="ALL">Todas as Origens</option>
                 {originsList.map((org) => (
@@ -297,25 +291,24 @@ export default function AdminLogsPage() {
                     {org}
                   </option>
                 ))}
-              </select>
+              </VelzonSelect>
             </div>
 
             {/* Filtro de Período */}
             <div>
-              <select
+              <VelzonSelect
                 value={period}
                 onChange={(e) => {
                   setPeriod(e.target.value);
                   setPage(1);
                 }}
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-[#e9ebec] dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 focus:outline-none focus:border-[#405189]"
               >
                 <option value="1h">Última 1 hora</option>
                 <option value="24h">Últimas 24 horas</option>
                 <option value="7d">Últimos 7 dias</option>
                 <option value="30d">Últimos 30 dias</option>
                 <option value="ALL">Histórico Completo</option>
-              </select>
+              </VelzonSelect>
             </div>
           </div>
         </div>

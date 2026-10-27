@@ -7,12 +7,9 @@ export class EmpregareScraper implements JobScraper {
   name = 'Empregare';
 
   async scrape(): Promise<RawJob[]> {
-    try {
-      return await this.scrapeViaHttp();
-    } catch (err) {
-      console.warn('[EmpregareScraper] HTTP falhou, tentando Playwright:', (err as Error).message);
-      return await this.scrapeViaPlaywright();
-    }
+    // Empregare depende de renderização dinâmica no navegador via JavaScript.
+    // Inicialização direta via Playwright Stealth para otimizar tempo no pipeline.
+    return await this.scrapeViaPlaywright();
   }
 
   private async scrapeViaHttp(): Promise<RawJob[]> {

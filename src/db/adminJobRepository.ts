@@ -231,6 +231,22 @@ export class AdminJobRepository {
     return result.changes > 0;
   }
 
+  public getJobById(id: string): AdminJobEntry | null {
+    const job = db
+      .prepare(`
+        SELECT 
+          id, url, title, company, platform, description, published_at, location,
+          work_model, required_seniority, tech_stack, salary, direct_contact,
+          status, application_status, category, is_junior_fullstack, overall_score,
+          is_tech_software, created_at
+        FROM jobs
+        WHERE id = ?
+      `)
+      .get(id) as AdminJobEntry | undefined;
+
+    return job || null;
+  }
+
   public toggleJobHide(id: string): { id: string; previousStatus: JobStatus; newStatus: JobStatus } | null {
     const job = db.prepare('SELECT status FROM jobs WHERE id = ?').get(id) as { status: JobStatus } | undefined;
     if (!job) return null;

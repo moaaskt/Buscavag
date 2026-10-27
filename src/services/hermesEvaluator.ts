@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { RawJob } from '../types/job.js';
-import { matchesWhitelist } from '../config/jobFilters.js';
+import { matchesWhitelist, matchesBlacklist } from '../config/jobFilters.js';
 import { evaluateSeniorityDistance, parseSalary } from './candidateMatcher.js';
 
 export interface EvaluationResult {
@@ -177,7 +177,8 @@ Responda APENAS em formato JSON no seguinte formato:
     const text = `${job.title} ${job.description}`.toLowerCase();
     const titleLower = job.title.toLowerCase();
 
-    // 1. FILTRO ANTI-FALSO-POSITIVO (NÃO-TECH / SUPORTE / VENDAS / RH)
+    // 1. FILTRO ANTI-FALSO-POSITIVO (NÃO-TECH / SUPORTE / VENDAS / RH / ENGENHARIAS NÃO-SOFTWARE)
+    const blacklistResult = matchesBlacklist(job.title);
     const nonTechPatterns = [
       /\b(sdr|bdr|inside sales|vendedor|vendedora|vendas|comercial|telemarketing|atendente|recepcionista)\b/i,
       /\b(recrutador|recrutadora|tech recruiter|talent acquisition|recursos humanos|analista de rh)\b/i,
@@ -186,11 +187,14 @@ Responda APENAS em formato JSON no seguinte formato:
       /\b(suporte n[ií]vel 1|helpdesk|help desk|sac)\b/i,
     ];
 
-    const isNonTech = nonTechPatterns.some((pattern) => pattern.test(titleLower));
+    const isNonTech = blacklistResult.matched || nonTechPatterns.some((pattern) => pattern.test(titleLower));
 
-    // Validação tech mínima
-    const hasWhitelistTerm = matchesWhitelist(job.title).matched;
-    const isTechSoftware = !isNonTech && (hasWhitelistTerm || /desenvolvedor|developer|engenheiro de software|programador|frontend|backend|full\s*stack|devops|data|analista de dados/i.test(text));
+    // Validação tech mínima:
+    // Deve ter match na whitelist de título OU possuir termos explícitos de desenvolvimento de software no título ou descrição
+    const whitelistResult = matchesWhitelist(job.title);
+    const hasExplicitDevTerm = /desenvolvedor|developer|engenheiro de software|programador|frontend|front-end|backend|back-end|full\s*stack|fullstack|devops|data engineer|analista de dados|analista de sistemas|software engineer/i.test(text);
+
+    const isTechSoftware = !isNonTech && (whitelistResult.matched || hasExplicitDevTerm);
 
     // 2. DETECÇÃO DE SENIORIDADE
     let requiredSeniority = 'Não especificado';
@@ -213,7 +217,7 @@ Responda APENAS em formato JSON no seguinte formato:
     }
 
     // 3. CATEGORIZAÇÃO
-    let category = 'Other';
+    let category = 'Não-Tech';
     if (isTechSoftware) {
       if (/esp32|esp8266|arduino|raspberry|iot|mqtt|home assistant|embarcados|automa[cç][aã]o/i.test(text)) {
         category = 'IoT & Embarcados';
@@ -233,8 +237,12 @@ Responda APENAS em formato JSON no seguinte formato:
         category = 'Frontend';
       } else if (/backend|back-end|back end/i.test(text) && !/frontend|front-end/i.test(text)) {
         category = 'Backend';
-      } else {
+      } else if (/full\s*stack|fullstack|full-stack/i.test(text) || (/frontend|front-end/i.test(text) && /backend|back-end/i.test(text))) {
+        // Apenas vagas que expressamente mencionam full stack ou ambas as pontas
         category = 'Full Stack';
+      } else {
+        // JAMAIS atribuir Full Stack por default!
+        category = 'Software Geral';
       }
     }
 

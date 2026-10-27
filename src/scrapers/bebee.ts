@@ -8,45 +8,65 @@ export class BebeeScraper implements JobScraper {
 
   async scrape(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
-    const searchSlugs = ['desenvolvedor-junior', 'full-stack', 'programador'];
+    const seenUrls = new Set<string>();
+    const searchQueries = ['desenvolvedor', 'programador', 'react node', 'full stack'];
 
-    for (const slug of searchSlugs) {
+    for (const query of searchQueries) {
       try {
-        const url = `https://br.bebee.com/vagas-de-emprego/${slug}`;
+        const url = `https://bebee.com/br/jobs?q=${encodeURIComponent(query)}`;
         const html = await fetchHtml(url);
         const $ = cheerio.load(html);
 
-        $('.job-item, .item-job, article, [class*="job-card"], .card-job').each((_, el) => {
-          const titleEl = $(el).find('h2 a, h3 a, .job-title a, a[href*="/job/"]');
-          const companyEl = $(el).find('.job-company, .company, [class*="company"]');
-          const locationEl = $(el).find('.job-location, .location, [class*="location"]');
-          const dateEl = $(el).find('.job-date, time, .date, [class*="date"]');
+        $('h3 a[href*="/br/jobs/"]').each((_, el) => {
+          const href = $(el).attr('href') || '';
+          if (
+            !href ||
+            href === '/br/jobs' ||
+            href.includes('/br/jobs/role') ||
+            href.includes('/br/jobs/remote')
+          ) {
+            return;
+          }
 
-          const title = titleEl.text().trim();
-          let href = titleEl.attr('href') || $(el).find('a').attr('href') || '';
-          if (!title || !href) return;
+          const fullUrl = href.startsWith('http') ? href : `https://bebee.com${href}`;
+          if (seenUrls.has(fullUrl)) return;
+          seenUrls.add(fullUrl);
 
-          const company = companyEl.text().trim() || 'beBee Partner';
-          const location = locationEl.text().trim() || 'Brasil';
-          const dateStr = dateEl.text().trim();
+          const title = $(el).text().trim();
+          if (!title) return;
+
+          // Localiza o card pai
+          const card = $(el).closest('div[role="link"]').length
+            ? $(el).closest('div[role="link"]')
+            : $(el)
+                .parents()
+                .filter((_, p) => $(p).find('h3 a[href*="/br/jobs/"]').length === 1 && $(p).find('p').length > 0)
+                .first();
+
+          const location =
+            card.find('svg.lucide-map-pin').parent().text().trim() || 'Brasil';
+          const company =
+            card.find('a[href*="/br/companies/"]').first().text().trim() ||
+            card.find('img + a, span.truncate a').first().text().trim() ||
+            'beBee Partner';
+          const description = card.find('p').first().text().trim() || `${title} - ${company} (${location})`;
+          const dateStr = card.find('svg.lucide-clock').parent().text().trim();
 
           const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 5)) return;
-
-          const fullUrl = href.startsWith('http') ? href : `https://br.bebee.com${href.startsWith('/') ? '' : '/'}${href}`;
+          if (isOlderThanDays(publishedAt, 7)) return;
 
           jobs.push({
             title,
             company,
             platform: PlatformSource.BEBEE,
             url: fullUrl,
-            description: `${title} - ${company} (${location})`,
+            description,
             publishedAt,
             location,
           });
         });
       } catch (err) {
-        console.warn(`[BebeeScraper] Aviso ao buscar "${slug}":`, (err as Error).message);
+        console.warn(`[BebeeScraper] Aviso ao buscar "${query}":`, (err as Error).message);
       }
     }
 
