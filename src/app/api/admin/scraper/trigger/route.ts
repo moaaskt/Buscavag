@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
       detached: true,
       stdio: 'ignore',
       env,
+      shell: process.platform === 'win32',
     });
 
     // Unref the child process so the main Node.js process doesn't wait for it
