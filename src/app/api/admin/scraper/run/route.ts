@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
       env,
+      shell: process.platform === 'win32',
     });
 
     if (child.stderr) {
