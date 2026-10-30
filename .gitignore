@@ -1,22 +1,43 @@
+# Environment & Secrets
 .env
+.env*.local
+
+# Next.js & Build outputs
 .next/
 dist/
-node_modules
-.vscode/
-.venv/
-**/__pycache__/
-*.pyc
-# Python
+out/
+
+# Dependencies
+node_modules/
+
+# Python Virtualenvs & Caches
 .venv/
 venv/
-__pycache__/
+**/__pycache__/
 *.pyc
-# AGENTS
-.planning/
-AGENTS.md
-CLAUDE.md
+
+# IDEs & Editors
+.vscode/
+.idea/
+
+# SQLite & Data files
 buscavag.db
 buscavag.db-shm
 buscavag.db-wal
 *.db
-uploads/resumes
+*.db-shm
+*.db-wal
+*.sqlite
+data/*.db
+data/*.db-shm
+data/*.db-wal
+!data/.gitkeep
+
+# Uploads
+uploads/resumes/*
+!uploads/resumes/.gitkeep
+
+# AI & Agent scratchpads
+.planning/
+AGENTS.md
+CLAUDE.md
