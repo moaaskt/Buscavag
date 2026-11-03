@@ -17,7 +17,7 @@ export class VagasScScraper implements JobScraper {
       searchSlugs.map(async (slug) => {
         try {
           const url = `https://vagas.sc/?s=${encodeURIComponent(slug)}`;
-          const html = await fetchHtml(url, { timeout: 8000 });
+          const html = await fetchHtml(url, { timeout: 15000 });
           const $ = cheerio.load(html);
 
           $('article, .job_listing, .post, [class*="post-container"]').each((_, el) => {
