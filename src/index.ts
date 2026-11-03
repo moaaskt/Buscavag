@@ -10,7 +10,10 @@ import { ScraperLogger } from './services/scraperLogger.js';
 dotenv.config();
 
 export async function runPipeline(customLogger?: ScraperLogger, targetScraperName?: string) {
-  const target = targetScraperName || process.env.SCRAPER_TARGET || undefined;
+  const args = process.argv.slice(2);
+  const targetIndex = args.indexOf('--target');
+  const cliTarget = targetIndex !== -1 && args[targetIndex + 1] ? args[targetIndex + 1] : undefined;
+  const target = targetScraperName || process.env.SCRAPER_TARGET || cliTarget || undefined;
   const logger = customLogger || new ScraperLogger(target || 'Pipeline');
   logger.info(
     target

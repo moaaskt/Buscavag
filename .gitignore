@@ -1,6 +1,7 @@
 # Environment & Secrets
 .env
 .env*.local
+li-cookies*.json
 
 # Next.js & Build outputs
 .next/

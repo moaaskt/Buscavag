@@ -49,21 +49,31 @@ export class LinkedInPostsScraper implements JobScraper {
 
       console.log(`[LinkedInPostsScraper] Acessando URL de busca no Feed do LinkedIn:\n${searchUrl}`);
 
+      let navResponse = null;
       try {
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+        navResponse = await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+        if (navResponse && navResponse.status() === 429) {
+          console.warn('[LinkedInPostsScraper] ⚠️ LinkedIn/Cloudflare respondeu com HTTP 429 (Too Many Requests / Proteção contra automação). A extração do feed foi ignorada com segurança nesta rodada.');
+          return [];
+        }
       } catch (navErr: any) {
-        if (navErr.message?.includes('ERR_TOO_MANY_REDIRECTS') || navErr.message?.includes('chrome-error')) {
-          console.warn('[LinkedInPostsScraper] ⚠️ O cookie li_at configurado expirou ou foi invalidado pelo LinkedIn (ERR_TOO_MANY_REDIRECTS). Atualize a chave LINKEDIN_SESSION_COOKIE no .env.');
+        if (
+          navErr.message?.includes('ERR_TOO_MANY_REDIRECTS') ||
+          navErr.message?.includes('chrome-error') ||
+          navErr.message?.includes('net::ERR_ABORTED')
+        ) {
+          console.warn('[LinkedInPostsScraper] ⚠️ Redirecionamento ou bloqueio de sessão detectado (ERR_TOO_MANY_REDIRECTS / chrome-error). Verifique se as chaves LINKEDIN_SESSION_COOKIE e LINKEDIN_JSESSIONID estão sincronizadas.');
           return [];
         }
         throw navErr;
       }
       await page.waitForTimeout(3500); // Esperar carregamento inicial da interface React
 
-      // Checar se bateu em authwall ou login
+      // Checar se bateu em authwall, login ou checkpoint
       const pageUrl = page.url();
-      if (pageUrl.includes('/login') || pageUrl.includes('/authwall')) {
-        throw new Error('unauthorized session: LinkedIn redirecionou para tela de login ou authwall (verifique a validade do cookie li_at no .env).');
+      if (pageUrl.includes('/login') || pageUrl.includes('/authwall') || pageUrl.includes('/checkpoint')) {
+        console.warn('[LinkedInPostsScraper] ⚠️ LinkedIn solicitou verificação ou redirecionou para tela de login/checkpoint. Pulando busca de feed nesta rodada.');
+        return [];
       }
 
       // 4. Estratégia de "Scroll & Harvest" devido à virtualização do DOM
@@ -124,8 +134,10 @@ export class LinkedInPostsScraper implements JobScraper {
     try {
       let cookies: any[] = [];
 
-      // 1. Variável direta de li_at (LINKEDIN_SESSION_COOKIE ou LI_AT_COOKIE)
+      // 1. Variável direta de li_at e JSESSIONID
       const directLiAt = process.env.LINKEDIN_SESSION_COOKIE || process.env.LI_AT_COOKIE || process.env.LINKEDIN_LI_AT;
+      const directJsessionId = process.env.LINKEDIN_JSESSIONID || process.env.JSESSIONID;
+
       if (directLiAt && directLiAt.trim().length > 10) {
         cookies.push({
           name: 'li_at',
@@ -136,6 +148,20 @@ export class LinkedInPostsScraper implements JobScraper {
           secure: true,
           sameSite: 'None',
         });
+
+        if (directJsessionId && directJsessionId.trim().length > 3) {
+          const raw = directJsessionId.trim();
+          const cleanValue = raw.startsWith('"') && raw.endsWith('"') ? raw : `"${raw}"`;
+          cookies.push({
+            name: 'JSESSIONID',
+            value: cleanValue,
+            domain: '.linkedin.com',
+            path: '/',
+            httpOnly: false,
+            secure: true,
+            sameSite: 'None',
+          });
+        }
       }
 
       // 2. Via array JSON em LI_COOKIES_JSON
