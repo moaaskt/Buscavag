@@ -9,16 +9,14 @@ export class ChaworkScraper implements JobScraper {
   async scrape(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
     const seenUrls = new Set<string>();
-    // Chawork bloqueia ou retorna 404 em rotas com barra final (/vagas/). A URL correta é /vagas sem barra.
-    const searchSlugs = ['tecnologia', 'desenvolvedor', 'programador', 'sistemas', ''];
+    // Slugs objetivos para acelerar o tempo de resposta e evitar timeout
+    const searchSlugs = ['desenvolvedor', 'tecnologia'];
 
     for (const slug of searchSlugs) {
       try {
-        const url = slug
-          ? `https://chawork.com.br/vagas?q=${encodeURIComponent(slug)}`
-          : 'https://chawork.com.br/vagas';
+        const url = `https://chawork.com.br/vagas?q=${encodeURIComponent(slug)}`;
 
-        const html = await fetchHtml(url);
+        const html = await fetchHtml(url, { timeout: 10000 });
         const $ = cheerio.load(html);
 
         $('.job-item, .job-card, .vaga-card, article').each((_, el) => {
@@ -60,7 +58,7 @@ export class ChaworkScraper implements JobScraper {
           });
         });
       } catch (err) {
-        console.warn(`[ChaworkScraper] Aviso ao buscar "${slug || 'geral'}":`, (err as Error).message);
+        console.warn(`[ChaworkScraper] Aviso ao buscar "${slug}":`, (err as Error).message);
       }
     }
 

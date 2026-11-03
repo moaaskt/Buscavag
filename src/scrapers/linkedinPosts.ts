@@ -43,13 +43,18 @@ export class LinkedInPostsScraper implements JobScraper {
       await page.route('**/*.{png,jpg,jpeg,webp,gif,svg,mp4,webm,woff,woff2,ttf}', (route) => route.abort());
 
       // 3. Montar a URL de busca com foco em posts e ordenação por mais recentes
-      // Cobertura ampla: oportunidades, vagas, contratação e desenvolvimento web/tech
-      const keywords = '("vagas" OR "oportunidades" OR "estamos contratando" OR "vaga júnior" OR "vaga full stack" OR "vaga front" OR "vaga back" OR #vagas) AND (dev OR desenvolvedor OR programador OR ti OR software)';
+      const keywords = 'vagas OR oportunidades OR "estamos contratando" OR #vagas';
       const searchUrl = `https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(keywords)}&origin=GLOBAL_SEARCH_HEADER&sortBy=%22date_posted%22`;
 
       console.log(`[LinkedInPostsScraper] Acessando URL de busca no Feed do LinkedIn:\n${searchUrl}`);
 
-      await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+      try {
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+      } catch (navErr) {
+        console.warn('[LinkedInPostsScraper] Aviso no carregamento inicial, limpando cookies de teste e tentando fallback anônimo:', (navErr as Error).message);
+        await context.clearCookies();
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+      }
       await page.waitForTimeout(3500); // Esperar carregamento inicial da interface React
 
       // Checar se bateu em authwall ou login
