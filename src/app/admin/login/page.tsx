@@ -414,6 +414,18 @@ export default function AdminLoginPage() {
                 <span>login</span>
               )}
             </button>
+
+            {/* Botão de Acesso Rápido Admin */}
+            <button
+              type="button"
+              onClick={() => {
+                setEmail('admin@buscavag.com.br');
+                setPassword('Admin@123456');
+              }}
+              className="w-full mt-3 py-2.5 px-3 text-xs md:text-sm text-emerald-400 hover:text-emerald-300 bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-500/30 rounded-[3px] transition-all flex items-center justify-center gap-1.5 cursor-pointer font-mono select-none"
+            >
+              <span>⚡ Preencher Admin (admin@buscavag.com.br)</span>
+            </button>
           </div>
         </form>
       </main>

@@ -36,8 +36,4 @@ data/*.db-wal
 # Uploads
 uploads/resumes/*
 !uploads/resumes/.gitkeep
-
-# AI & Agent scratchpads
-.planning/
-AGENTS.md
 CLAUDE.md
