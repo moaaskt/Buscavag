@@ -40,9 +40,10 @@ async function main() {
     const jsessionIdCookie = cookies.find((c) => c.name === 'JSESSIONID');
 
     const currentUrl = page.url();
-    const isLoggedIn = currentUrl.includes('/feed') || currentUrl.includes('/mynetwork') || currentUrl.includes('/messaging');
+    const isLoggedIn = currentUrl.includes('/feed') || currentUrl.includes('/mynetwork') || currentUrl.includes('/messaging') || currentUrl.includes('/in/');
 
-    if (liAtCookie && jsessionIdCookie && (isLoggedIn || liAtCookie.value.length > 20)) {
+    // Só captura quando REALMENTE estiver dentro da área logada (evita fechar durante 2FA/checkpoint)
+    if (liAtCookie && jsessionIdCookie && isLoggedIn) {
       console.log('\n🎉 Login detectado com sucesso!');
       console.log(`li_at encontrado: ${liAtCookie.value.substring(0, 15)}...`);
       console.log(`JSESSIONID encontrado: ${jsessionIdCookie.value}`);
@@ -92,3 +93,4 @@ async function main() {
 }
 
 main().catch(console.error);
+
