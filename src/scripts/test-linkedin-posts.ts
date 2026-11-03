@@ -51,3 +51,4 @@ testLinkedInPostsConnector().catch((err) => {
   console.error('Erro no teste:', err);
   process.exit(1);
 });
+

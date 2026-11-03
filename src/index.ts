@@ -42,7 +42,7 @@ export async function runPipeline(customLogger?: ScraperLogger, targetScraperNam
   console.log(`-> Total de vagas coletadas: ${rawJobs.length}`);
 
   // 2. Filtragem de duplicadas, limiar de data (5 dias) e filtros não-tech
-  console.log('\n[2/4] Filtrando vagas duplicadas, limiar de 5 dias e filtros não-tech...');
+  console.log('\n[2/4] Filtrando vagas duplicadas, limiar de 48 horas (2 dias) e filtros não-tech...');
   logger.info('[2/4] Aplicando filtros de duplicidade, recência e termos não-tech...', { step: 'PROGRESS' });
   let newJobsCount = 0;
   let evaluatedCount = 0;
@@ -53,7 +53,7 @@ export async function runPipeline(customLogger?: ScraperLogger, targetScraperNam
   let discardedNonTechCount = 0;
 
   for (const job of rawJobs) {
-    if (isOlderThanDays(job.publishedAt, 5)) {
+    if (isOlderThanDays(job.publishedAt, 2)) {
       continue;
     }
 
