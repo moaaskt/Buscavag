@@ -22,7 +22,9 @@
     "kill:zombies": "pkill -f 'next dev|tsx' 2>/dev/null || fuser -k 3000/tcp 2>/dev/null || true",
     "clean:all": "npm run kill:zombies && npm run clean:ports",
     "scrape:linkedin-posts": "tsx src/index.ts --target \"LinkedIn Posts\"",
-    "auth:linkedin": "tsx scripts/auth-linkedin.ts"
+    "auth:linkedin": "tsx scripts/auth-linkedin.ts",
+    "chrome:linkedin": "powershell -ExecutionPolicy Bypass -File scripts/start-chrome-linkedin.ps1",
+    "test:linkedin-posts": "tsx scripts/test-linkedin-posts.ts"
   },
   "keywords": [],
   "author": "",

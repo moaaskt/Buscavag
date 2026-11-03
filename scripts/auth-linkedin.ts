@@ -1,96 +1,84 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import { exec } from 'child_process';
 
 async function main() {
   console.log('\n======================================================');
-  console.log('  BUSCAVAG - AUTENTICADOR INTERATIVO DO LINKEDIN');
-  console.log('======================================================');
-  console.log('Abrindo navegador Google Chrome para autenticação...\n');
-  console.log('👉 Faça login na janela que abrir (ou clique em continuar).');
-  console.log('👉 Assim que você entrar no LinkedIn, os tokens de sessão serão capturados e salvos automaticamente!\n');
+  console.log('  BUSCAVAG - VALIDADOR DE SESSÃO CHROME (PORTA 9222)');
+  console.log('======================================================\n');
 
-  const userDataDir = path.resolve(process.cwd(), 'data', 'linkedin_profile');
-  if (!fs.existsSync(userDataDir)) {
-    fs.mkdirSync(userDataDir, { recursive: true });
+  console.log('Verificando conexão com o Chrome dedicado (porta 9222)...');
+
+  let browser;
+  try {
+    browser = await chromium.connectOverCDP('http://localhost:9222', { timeout: 3000 });
+    console.log('✅ Conexão estabelecida com sucesso com o Chrome na porta 9222!');
+  } catch {
+    console.warn('⚠️ Google Chrome com depuração não detectado na porta 9222.');
+    console.log('👉 Iniciando o Chrome com perfil dedicado agora...');
+    
+    // Inicia o script PowerShell
+    exec('powershell -ExecutionPolicy Bypass -File scripts/start-chrome-linkedin.ps1');
+    
+    console.log('Aguardando 5 segundos para conexão...');
+    await new Promise((r) => setTimeout(r, 5000));
+    
+    try {
+      browser = await chromium.connectOverCDP('http://localhost:9222', { timeout: 5000 });
+      console.log('✅ Conectado ao Chrome recém-aberto!');
+    } catch {
+      console.error('❌ Não foi possível conectar ao Chrome. Por favor, execute:');
+      console.error('   npm run chrome:linkedin');
+      process.exit(1);
+    }
   }
 
-  const context = await chromium.launchPersistentContext(userDataDir, {
-    headless: false,
-    channel: 'chrome',
-    args: [
-      '--no-sandbox',
-      '--disable-blink-features=AutomationControlled',
-    ],
-    viewport: { width: 1280, height: 800 }
-  });
+  const contexts = browser.contexts();
+  const context = contexts[0] || (await browser.newContext());
+  const page = await context.newPage();
 
-  const page = context.pages()[0] || (await context.newPage());
-  await page.goto('https://www.linkedin.com/login');
-
-  console.log('Aguardando login no LinkedIn (você tem até 3 minutos)...');
-
-  let captured = false;
-  const timeoutMs = 180000;
-  const startTime = Date.now();
-
-  while (Date.now() - startTime < timeoutMs) {
-    const cookies = await context.cookies('https://www.linkedin.com');
-    const liAtCookie = cookies.find((c) => c.name === 'li_at');
-    const jsessionIdCookie = cookies.find((c) => c.name === 'JSESSIONID');
+  try {
+    console.log('Verificando status de login no LinkedIn...');
+    await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await new Promise((r) => setTimeout(r, 2000));
 
     const currentUrl = page.url();
-    const isLoggedIn = currentUrl.includes('/feed') || currentUrl.includes('/mynetwork') || currentUrl.includes('/messaging') || currentUrl.includes('/in/');
+    const isLogged = currentUrl.includes('/feed') || currentUrl.includes('/mynetwork') || currentUrl.includes('/in/');
 
-    // Só captura quando REALMENTE estiver dentro da área logada (evita fechar durante 2FA/checkpoint)
-    if (liAtCookie && jsessionIdCookie && isLoggedIn) {
-      console.log('\n🎉 Login detectado com sucesso!');
-      console.log(`li_at encontrado: ${liAtCookie.value.substring(0, 15)}...`);
-      console.log(`JSESSIONID encontrado: ${jsessionIdCookie.value}`);
+    if (isLogged) {
+      console.log('🎉 Login verificado com sucesso no LinkedIn!');
+      console.log('URL atual:', currentUrl);
 
-      // Salva no .env
-      const envPath = path.resolve(process.cwd(), '.env');
-      if (fs.existsSync(envPath)) {
-        let envContent = fs.readFileSync(envPath, 'utf-8');
-        
-        if (envContent.includes('LINKEDIN_SESSION_COOKIE=')) {
-          envContent = envContent.replace(/LINKEDIN_SESSION_COOKIE=.*/g, `LINKEDIN_SESSION_COOKIE=${liAtCookie.value}`);
-        } else {
-          envContent += `\nLINKEDIN_SESSION_COOKIE=${liAtCookie.value}`;
-        }
+      // Normalização de cookies para .linkedin.com caso necessário como backup
+      const cookies = await context.cookies('https://www.linkedin.com');
+      const normalized = cookies.map((c) => ({
+        ...c,
+        domain: c.domain?.startsWith('.www.') ? '.linkedin.com' : c.domain,
+      }));
 
-        if (envContent.includes('LINKEDIN_JSESSIONID=')) {
-          envContent = envContent.replace(/LINKEDIN_JSESSIONID=.*/g, `LINKEDIN_JSESSIONID=${jsessionIdCookie.value}`);
-        } else {
-          envContent += `\nLINKEDIN_JSESSIONID=${jsessionIdCookie.value}`;
-        }
-
-        fs.writeFileSync(envPath, envContent, 'utf-8');
-        console.log('✅ Arquivo .env atualizado automaticamente com as novas chaves!');
-      }
-
-      // Salva também no li-cookies.json
       const liCookiesPath = path.resolve(process.cwd(), 'li-cookies.json');
-      fs.writeFileSync(liCookiesPath, JSON.stringify(cookies, null, 2), 'utf-8');
-      console.log('✅ Arquivo li-cookies.json sincronizado com a sessão completa (bcookie, lidc, li_at)!');
+      fs.writeFileSync(liCookiesPath, JSON.stringify(normalized, null, 2), 'utf-8');
+      console.log(`✅ ${normalized.length} cookies sincronizados em li-cookies.json.`);
 
-      captured = true;
-      break;
+      // Limpar cooldown caso existisse
+      const cooldownPath = path.resolve(process.cwd(), 'data', 'linkedin-cooldown.json');
+      if (fs.existsSync(cooldownPath)) {
+        fs.unlinkSync(cooldownPath);
+        console.log('✅ Cooldown anterior removido.');
+      }
+    } else {
+      console.warn('⚠️ O LinkedIn não está na tela de Feed (URL:', currentUrl, ')');
+      console.log('👉 Por favor, faça login manualmente na janela do Chrome aberta e execute este comando novamente.');
     }
-
-    await new Promise((r) => setTimeout(r, 2000));
+  } finally {
+    // Fecha apenas a aba de verificação criada pelo script
+    await page.close();
   }
 
-  if (captured) {
-    console.log('\n🚀 Sessão do LinkedIn autenticada e pronta para o scraper!');
-    console.log('Fechando navegador em 3 segundos...');
-    await new Promise((r) => setTimeout(r, 3000));
-  } else {
-    console.warn('\n⚠️ Tempo limite atingido sem confirmação de login.');
-  }
-
-  await context.close();
+  console.log('\n======================================================');
+  console.log('  VALIDAÇÃO CONCLUÍDA');
+  console.log('======================================================\n');
 }
 
 main().catch(console.error);
-

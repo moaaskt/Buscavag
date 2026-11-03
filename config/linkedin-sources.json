@@ -1,0 +1,16 @@
+{
+  "maxSourcesPerCycle": 10,
+  "maxPostsPerCycle": 40,
+  "sources": [
+    {
+      "name": "Helton Chagas",
+      "url": "https://www.linkedin.com/in/heltonchagas/recent-activity/all/",
+      "type": "profile"
+    },
+    {
+      "name": "200DEV",
+      "url": "https://www.linkedin.com/company/200dev/posts/",
+      "type": "company"
+    }
+  ]
+}
