@@ -36,9 +36,7 @@ async function ensurePythonBridge(): Promise<void> {
       ['-m', 'uvicorn', 'app.main:app', '--app-dir', 'src/services/scrapling-engine', '--port', '8001', '--host', '127.0.0.1'],
       {
         cwd: process.cwd(),
-        stdio: 'ignore',
-        detached: false,
-        shell: process.platform === 'win32',
+        stdio: 'ignore', detached: false,
       }
     );
 
