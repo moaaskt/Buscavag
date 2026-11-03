@@ -18,7 +18,6 @@ export { InfojobsScraper } from './infojobs.js';
 export { ChaworkScraper } from './chawork.js';
 export { TrabalhaBrasilScraper } from './trabalhaBrasil.js';
 export { BneScraper } from './bne.js';
-export { BebeeScraper } from './bebee.js';
 export { EmpregosScraper } from './empregos.js';
 export { RecrutaSimplesScraper } from './recrutaSimples.js';
 // ATSs
@@ -59,7 +58,6 @@ import { InfojobsScraper } from './infojobs.js';
 import { ChaworkScraper } from './chawork.js';
 import { TrabalhaBrasilScraper } from './trabalhaBrasil.js';
 import { BneScraper } from './bne.js';
-import { BebeeScraper } from './bebee.js';
 import { EmpregosScraper } from './empregos.js';
 import { RecrutaSimplesScraper } from './recrutaSimples.js';
 import { RecruteiEmpregosScraper } from './recruteiEmpregos.js';
@@ -133,7 +131,6 @@ export class ScraperOrchestrator {
       new ChaworkScraper(),
       new TrabalhaBrasilScraper(),
       new BneScraper(),
-      new BebeeScraper(),
       new EmpregosScraper(),
       new RecrutaSimplesScraper(),
       // ATSs

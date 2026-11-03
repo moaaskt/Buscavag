@@ -114,6 +114,18 @@ export class TelegramNotifier {
     const candidate = this.getTargetCandidateContext();
     const match = this.candidateMatcher.calculateMatch(job, candidate);
 
+    // 0. Bloqueio definitivo de plataformas descartadas/pagas (ex: beBee)
+    const platformLower = (job.platform || '').toLowerCase();
+    const companyLower = (job.company || '').toLowerCase();
+    const urlLower = (job.url || '').toLowerCase();
+    if (platformLower.includes('bebee') || companyLower.includes('bebee') || urlLower.includes('bebee.com')) {
+      return {
+        eligible: false,
+        reason: 'Fonte desativada/paga (beBee)',
+        matchResult: match,
+      };
+    }
+
     // 1. Trava estrita de Senioridade
     const titleLower = (job.title || '').toLowerCase();
     const seniorityLower = (job.requiredSeniority || job.required_seniority || '').toLowerCase();
@@ -125,6 +137,7 @@ export class TelegramNotifier {
       titleLower.includes('lead') ||
       titleLower.includes('especialista') ||
       titleLower.includes('principal') ||
+      /\b(iii|iv|v)\b/i.test(titleLower) ||
       seniorityLower.includes('senior') ||
       seniorityLower.includes('sênior');
 
@@ -144,7 +157,13 @@ export class TelegramNotifier {
 
     // 2. Trava estrita de Stack e Tech
     // Exige aderência de stack (>= 60) e score geral mínimo (>= 60)
-    if (match.stackScore < 60) {
+    const isExplicitJuniorDev = (
+      job.isJuniorFullStack === true ||
+      job.is_junior_fullstack === 1 ||
+      /\b(j[úu]nior|jr)\b/i.test(titleLower)
+    ) && /\b(dev|developer|desenvolvedor|programador|software|integra|full\s*stack|frontend|backend)\b/i.test(titleLower);
+
+    if (match.stackScore < 60 && !isExplicitJuniorDev) {
       return {
         eligible: false,
         reason: `Aderência de stack insuficiente (${match.stackScore}% < 60%) para o perfil`,

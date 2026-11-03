@@ -4,13 +4,16 @@ import { JobRepository } from './db/repository.js';
 import { HermesEvaluator } from './services/hermesEvaluator.js';
 import { TelegramNotifier } from './services/telegramNotifier.js';
 import { isOlderThanDays } from './utils/date.js';
-import { matchesBlacklist, matchesWhitelist, isTechJob } from './config/jobFilters.js';
+import { matchesBlacklist, matchesWhitelist, isTechJob, isBlacklistedSource } from './config/jobFilters.js';
 import { ScraperLogger } from './services/scraperLogger.js';
 
 dotenv.config();
 
 export async function runPipeline(customLogger?: ScraperLogger, targetScraperName?: string) {
-  const target = targetScraperName || process.env.SCRAPER_TARGET || undefined;
+  const args = process.argv.slice(2);
+  const targetIndex = args.indexOf('--target');
+  const cliTarget = targetIndex !== -1 && args[targetIndex + 1] ? args[targetIndex + 1] : undefined;
+  const target = targetScraperName || process.env.SCRAPER_TARGET || cliTarget || undefined;
   const logger = customLogger || new ScraperLogger(target || 'Pipeline');
   logger.info(
     target
@@ -54,6 +57,11 @@ export async function runPipeline(customLogger?: ScraperLogger, targetScraperNam
 
   for (const job of rawJobs) {
     if (isOlderThanDays(job.publishedAt, 2)) {
+      continue;
+    }
+
+    // Filtro 0: Bloqueio estrito de fontes desativadas/pagas (ex: beBee)
+    if (isBlacklistedSource(job.platform, job.company, job.url)) {
       continue;
     }
 
@@ -175,7 +183,6 @@ export async function runPipeline(customLogger?: ScraperLogger, targetScraperNam
       const sent = await notifier.sendNotification(job);
       repo.markAsNotified(job.id);
       if (sent) {
-        repo.markAsNotified(job.id);
         console.log(`  ✓ Notificada: "${job.title}" (${job.company})`);
         logger.info(`Notificação enviada: "${job.title}" (${job.company})`, {
           step: 'PROGRESS',

@@ -8,14 +8,17 @@ import { parseRelativeDate, isOlderThanDays } from '../utils/date.js';
 export class LinkedInPostsScraper implements JobScraper {
   name = 'LinkedIn Posts';
 
-  // Palavras-chave para filtro extra no front, e query do LinkedIn
+  // Palavras-chave para filtro extra no front e correspondência com posts
   private jobKeywords = [
-    'vaga', 'oportunidade', 'contrat', 'freela', 'freelance', 'projeto',
-    'dev', 'developer', 'desenvolvedor', 'programador', 'fullstack', 'full-stack',
-    'frontend', 'front-end', 'backend', 'back-end', 'junior', 'júnior', 'jr',
-    'estagio', 'estágio', 'pj', 'clt', 'remoto', 'home office',
+    'vaga', 'vagas', 'oportunidade', 'oportunidades', 'emprego', 'empregos',
+    'contrat', 'contratando', 'contratação', 'hiring', 'we are hiring', 'we are looking',
+    'estamos contratando', 'estamos com vaga', 'abrimos vaga', 'possuo vaga',
+    'dev', 'developer', 'desenvolvedor', 'desenvolvedora', 'programador', 'programadora',
+    'fullstack', 'full-stack', 'frontend', 'front-end', 'backend', 'back-end',
+    'junior', 'júnior', 'jr', 'estagio', 'estágio', 'trainee', 'iniciante',
+    'pj', 'clt', 'remoto', 'home office', 'hibrido', 'híbrido',
     'requisitos', 'candidat', 'curriculo', 'currículo', 'envie', 'enviar',
-    'estamos contratando', 'hiring', 'we are hiring', 'we are looking'
+    'integração', 'integrações', 'apis', 'rest', 'node', 'react', 'typescript', 'php', 'python'
   ];
 
   async scrape(): Promise<RawJob[]> {
@@ -32,62 +35,78 @@ export class LinkedInPostsScraper implements JobScraper {
       context = stealth.context;
       page = stealth.page;
 
-      // 1. Injeção de Cookies de Sessão Seguros (li_at / LINKEDIN_SESSION_COOKIE)
+      // Injeção de Cookies de Sessão Seguros (li-cookies.json ou .env)
       const hasCookies = await this.injectSessionCookies(context);
-      
       if (!hasCookies) {
-        console.warn('[LinkedInPostsScraper] unauthorized: Nenhum cookie de sessão ("li_at" / "LINKEDIN_SESSION_COOKIE") encontrado no .env ou li-cookies.json. O LinkedIn bloqueará a pesquisa de publicações.');
+        console.warn('[LinkedInPostsScraper] ℹ️ Nenhum cookie de sessão ("li_at" / "LINKEDIN_SESSION_COOKIE") válido encontrado no .env. Execute "npm run auth:linkedin" para conectar.');
+        return [];
       }
 
-      // 2. Otimização de Recursos: Bloquear mídias pesadas
+      // Bloquear mídias pesadas para economizar banda
       await page.route('**/*.{png,jpg,jpeg,webp,gif,svg,mp4,webm,woff,woff2,ttf}', (route) => route.abort());
 
-      // 3. Montar a URL de busca com foco em posts e ordenação por mais recentes
-      const keywords = 'vagas OR oportunidades OR "estamos contratando" OR #vagas';
-      const searchUrl = `https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(keywords)}&origin=GLOBAL_SEARCH_HEADER&sortBy=%22date_posted%22`;
+      // Queries focadas em postagens recentes de oportunidades
+      const queries = [
+        '("vagas" OR "oportunidade" OR "contratando" OR #vagas OR empregos) AND ("desenvolvedor" OR "developer" OR "programador" OR "fullstack" OR "junior" OR "estagio")',
+        '("junior" OR "jr" OR "estágio") AND ("desenvolvedor" OR "programador" OR "dev" OR "full stack")',
+      ];
 
-      console.log(`[LinkedInPostsScraper] Acessando URL de busca no Feed do LinkedIn:\n${searchUrl}`);
+      for (const query of queries) {
+        const searchUrl = `https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(query)}&origin=GLOBAL_SEARCH_HEADER&sortBy=%22date_posted%22`;
+        console.log(`[LinkedInPostsScraper] Buscando publicações no Feed do LinkedIn:\n${searchUrl}`);
 
-      try {
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
-      } catch (navErr) {
-        console.warn('[LinkedInPostsScraper] Aviso no carregamento inicial, limpando cookies de teste e tentando fallback anônimo:', (navErr as Error).message);
-        await context.clearCookies();
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
-      }
-      await page.waitForTimeout(3500); // Esperar carregamento inicial da interface React
-
-      // Checar se bateu em authwall ou login
-      const pageUrl = page.url();
-      if (pageUrl.includes('/login') || pageUrl.includes('/authwall')) {
-        throw new Error('unauthorized session: LinkedIn redirecionou para tela de login ou authwall (verifique a validade do cookie li_at no .env).');
-      }
-
-      // 4. Estratégia de "Scroll & Harvest" devido à virtualização do DOM
-      console.log(`[LinkedInPostsScraper] Iniciando extração contínua (Scroll & Harvest) de posts...`);
-      let consecutiveEmptyScrolls = 0;
-      
-      // Realiza scrolls curtos colhendo os nós visíveis a cada parada
-      for (let i = 0; i < 15; i++) {
-        const batchJobs = await this.harvestVisiblePosts(page, seenPostUrns);
-        
-        if (batchJobs.length > 0) {
-          jobs.push(...batchJobs);
-          consecutiveEmptyScrolls = 0;
-        } else {
-          consecutiveEmptyScrolls++;
+        let navResponse = null;
+        try {
+          navResponse = await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+          if (navResponse && navResponse.status() === 429) {
+            console.warn('[LinkedInPostsScraper] ⚠️ LinkedIn/Cloudflare respondeu com HTTP 429 (Too Many Requests / Proteção contra automação). Pulando consulta.');
+            break;
+          }
+        } catch (navErr: any) {
+          if (
+            navErr.message?.includes('ERR_TOO_MANY_REDIRECTS') ||
+            navErr.message?.includes('chrome-error') ||
+            navErr.message?.includes('net::ERR_ABORTED') ||
+            navErr.message?.includes('ERR_HTTP_RESPONSE_CODE_FAILURE')
+          ) {
+            console.warn('[LinkedInPostsScraper] ⚠️ Sessão do LinkedIn expirada ou bloqueada por redirecionamento. Execute "npm run auth:linkedin" para renovar o acesso.');
+            break;
+          }
+          throw navErr;
         }
 
-        // Se passarmos 3 scrolls seguidos sem novos posts, finalizamos
-        if (consecutiveEmptyScrolls >= 3) {
+        await page.waitForTimeout(4000);
+        const pageUrl = page.url();
+        if (pageUrl.includes('/login') || pageUrl.includes('/authwall') || pageUrl.includes('/checkpoint')) {
+          console.warn('[LinkedInPostsScraper] ⚠️ LinkedIn solicitou tela de login/checkpoint. Execute "npm run auth:linkedin" para renovar.');
           break;
         }
 
-        // Scroll suave simulando rolagem humana
-        await page.evaluate(() => {
-          window.scrollBy({ top: 850, behavior: 'smooth' });
-        });
-        await page.waitForTimeout(2000 + Math.random() * 1200);
+        // Scroll & Harvest
+        let consecutiveEmptyScrolls = 0;
+        for (let i = 0; i < 8; i++) {
+          try {
+            const batchJobs = await this.harvestVisiblePosts(page, seenPostUrns);
+            if (batchJobs.length > 0) {
+              jobs.push(...batchJobs);
+              consecutiveEmptyScrolls = 0;
+            } else {
+              consecutiveEmptyScrolls++;
+            }
+          } catch (harvestErr: any) {
+            console.warn('[LinkedInPostsScraper] Aviso transitório ao colher posts:', harvestErr.message);
+            await page.waitForTimeout(1500);
+          }
+
+          if (consecutiveEmptyScrolls >= 3) break;
+
+          try {
+            await page.evaluate(() => {
+              window.scrollBy({ top: 850, behavior: 'smooth' });
+            });
+          } catch {}
+          await page.waitForTimeout(2000 + Math.random() * 1000);
+        }
       }
 
     } catch (err) {
@@ -121,50 +140,57 @@ export class LinkedInPostsScraper implements JobScraper {
     try {
       let cookies: any[] = [];
 
-      // 1. Variável direta de li_at (LINKEDIN_SESSION_COOKIE ou LI_AT_COOKIE)
-      const directLiAt = process.env.LINKEDIN_SESSION_COOKIE || process.env.LI_AT_COOKIE || process.env.LINKEDIN_LI_AT;
-      if (directLiAt && directLiAt.trim().length > 10) {
-        cookies.push({
-          name: 'li_at',
-          value: directLiAt.trim(),
-          domain: '.linkedin.com',
-          path: '/',
-          httpOnly: true,
-          secure: true,
-          sameSite: 'None',
-        });
-      }
+      // 1. Prioridade: arquivo local li-cookies.json com a sessão completa do navegador
+      const cookieFilePaths = [
+        process.env.LI_COOKIES_PATH,
+        path.resolve(process.cwd(), 'li-cookies.json'),
+        path.resolve(process.cwd(), 'data', 'li-cookies.json'),
+      ].filter(Boolean) as string[];
 
-      // 2. Via array JSON em LI_COOKIES_JSON
-      if (cookies.length === 0 && process.env.LI_COOKIES_JSON) {
-        const raw = process.env.LI_COOKIES_JSON.trim();
-        if (raw.startsWith('[') && raw.endsWith(']')) {
+      for (const filePath of cookieFilePaths) {
+        if (fs.existsSync(filePath)) {
           try {
-            cookies = JSON.parse(raw);
-          } catch (jsonErr) {
-            console.warn('[LinkedInPostsScraper] JSON inválido em LI_COOKIES_JSON');
+            const fileContent = fs.readFileSync(filePath, 'utf-8');
+            const parsed = JSON.parse(fileContent);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              cookies = parsed;
+              console.log(`[LinkedInPostsScraper] 🍪 Carregados ${cookies.length} cookies completos de sessão a partir de "${path.basename(filePath)}".`);
+              break;
+            }
+          } catch (readErr) {
+            console.warn(`[LinkedInPostsScraper] Falha ao carregar cookies de "${filePath}":`, (readErr as Error).message);
           }
         }
       }
 
-      // 3. Via arquivo local li-cookies.json
+      // 2. Fallback: variáveis diretas do .env (LINKEDIN_SESSION_COOKIE e LINKEDIN_JSESSIONID)
       if (cookies.length === 0) {
-        const cookieFilePaths = [
-          process.env.LI_COOKIES_PATH,
-          path.resolve(process.cwd(), 'li-cookies.json'),
-          path.resolve(process.cwd(), 'data', 'li-cookies.json'),
-        ].filter(Boolean) as string[];
+        const directLiAt = process.env.LINKEDIN_SESSION_COOKIE || process.env.LI_AT_COOKIE || process.env.LINKEDIN_LI_AT;
+        const directJsessionId = process.env.LINKEDIN_JSESSIONID || process.env.JSESSIONID;
 
-        for (const filePath of cookieFilePaths) {
-          if (fs.existsSync(filePath)) {
-            try {
-              const fileContent = fs.readFileSync(filePath, 'utf-8');
-              cookies = JSON.parse(fileContent);
-              console.log(`[LinkedInPostsScraper] Carregados ${cookies.length} cookies a partir de "${filePath}".`);
-              break;
-            } catch (readErr) {
-              console.warn(`[LinkedInPostsScraper] Falha ao carregar cookies de "${filePath}":`, (readErr as Error).message);
-            }
+        if (directLiAt && directLiAt.trim().length > 10) {
+          cookies.push({
+            name: 'li_at',
+            value: directLiAt.trim(),
+            domain: '.linkedin.com',
+            path: '/',
+            httpOnly: true,
+            secure: true,
+            sameSite: 'None',
+          });
+
+          if (directJsessionId && directJsessionId.trim().length > 3) {
+            const raw = directJsessionId.trim();
+            const cleanValue = raw.startsWith('"') && raw.endsWith('"') ? raw : `"${raw}"`;
+            cookies.push({
+              name: 'JSESSIONID',
+              value: cleanValue,
+              domain: '.linkedin.com',
+              path: '/',
+              httpOnly: false,
+              secure: true,
+              sameSite: 'None',
+            });
           }
         }
       }
@@ -199,53 +225,64 @@ export class LinkedInPostsScraper implements JobScraper {
     const jobs: RawJob[] = [];
     
     // Expandir textos longos clicando nos botões "ver mais"
-    await page.evaluate(() => {
-      const seeMoreButtons = document.querySelectorAll('button.see-more-text__button, button.feed-shared-inline-show-more-text__see-more-less-toggle');
-      seeMoreButtons.forEach((btn) => {
-        try {
-          (btn as HTMLElement).click();
-        } catch {}
+    try {
+      await page.evaluate(() => {
+        const seeMoreButtons = document.querySelectorAll(
+          'button.see-more-text__button, button.feed-shared-inline-show-more-text__see-more-less-toggle, button[aria-label*="mais"], button[aria-label*="more"], button.inline-show-more-text__button'
+        );
+        seeMoreButtons.forEach((btn) => {
+          try {
+            (btn as HTMLElement).click();
+          } catch {}
+        });
       });
-    });
+    } catch {}
     
     await page.waitForTimeout(600);
 
-    const rawPosts = await page.evaluate(() => {
-      const posts: Array<{ urn: string; text: string; author: string; authorTitle: string; dateStr: string; permalink: string }> = [];
-      
-      const postElements = document.querySelectorAll('.feed-shared-update-v2, div[data-urn*="activity"]');
-      
-      postElements.forEach((el) => {
-        const urn = el.getAttribute('data-urn') || el.getAttribute('data-id') || '';
-        if (!urn) return;
-
-        const textEl = el.querySelector('.update-components-text, .feed-shared-update-v2__description, .feed-shared-text');
-        const text = textEl?.textContent?.trim() || '';
-        if (!text || text.length < 20) return;
-
-        const authorEl = el.querySelector('.update-components-actor__name span[dir="ltr"], .feed-shared-actor__name, .update-components-actor__title');
-        const author = authorEl?.textContent?.trim() || 'Recrutador / Empresa no LinkedIn';
-
-        const authorTitleEl = el.querySelector('.update-components-actor__description span[dir="ltr"], .feed-shared-actor__description, .update-components-actor__sub-description');
-        const authorTitle = authorTitleEl?.textContent?.trim() || '';
-
-        const dateEl = el.querySelector('.update-components-actor__sub-description span[dir="ltr"], .update-components-actor__sub-description span[aria-hidden="true"], .feed-shared-actor__sub-description');
-        let dateStr = dateEl?.textContent?.trim() || 'Hoje';
+    let rawPosts: any[] = [];
+    try {
+      rawPosts = await page.evaluate(() => {
+        const posts: Array<{ urn: string; text: string; author: string; authorTitle: string; dateStr: string; permalink: string }> = [];
         
-        dateStr = dateStr.replace(/editado|edited/i, '').replace(/•/g, '').trim();
+        const postElements = document.querySelectorAll('.feed-shared-update-v2, div[data-urn*="activity"], div[data-id*="activity"]');
+        
+        postElements.forEach((el) => {
+          const urn = el.getAttribute('data-urn') || el.getAttribute('data-id') || '';
+          if (!urn) return;
 
-        // Extrai permalink ou monta via URN
-        const linkEl = el.querySelector('a.feed-shared-control-menu__trigger, a[href*="/feed/update/"]');
-        let permalink = linkEl?.getAttribute('href') || '';
-        if (!permalink || !permalink.includes('linkedin.com')) {
-          permalink = `https://www.linkedin.com/feed/update/${urn}/`;
-        }
+          const textEl = el.querySelector(
+            '.update-components-update-v2__commentary, .feed-shared-inline-show-more-text, .update-components-text, .feed-shared-update-v2__description, .feed-shared-text, [data-ad-preview="message"], span.break-words'
+          );
+          const text = textEl?.textContent?.trim() || '';
+          if (!text || text.length < 20) return;
 
-        posts.push({ urn, text, author, authorTitle, dateStr, permalink });
+          const authorEl = el.querySelector('.update-components-actor__name span[dir="ltr"], .feed-shared-actor__name, .update-components-actor__title, .update-components-actor__name');
+          const author = authorEl?.textContent?.trim() || 'Recrutador / Empresa no LinkedIn';
+
+          const authorTitleEl = el.querySelector('.update-components-actor__description span[dir="ltr"], .feed-shared-actor__description, .update-components-actor__sub-description, .update-components-actor__description');
+          const authorTitle = authorTitleEl?.textContent?.trim() || '';
+
+          const dateEl = el.querySelector('.update-components-actor__sub-description span[dir="ltr"], .update-components-actor__sub-description span[aria-hidden="true"], .feed-shared-actor__sub-description');
+          let dateStr = dateEl?.textContent?.trim() || 'Hoje';
+          
+          dateStr = dateStr.replace(/editado|edited/i, '').replace(/•/g, '').trim();
+
+          // Extrai permalink ou monta via URN
+          const linkEl = el.querySelector('a.feed-shared-control-menu__trigger, a[href*="/feed/update/"]');
+          let permalink = linkEl?.getAttribute('href') || '';
+          if (!permalink || !permalink.includes('linkedin.com')) {
+            permalink = `https://www.linkedin.com/feed/update/${urn}/`;
+          }
+
+          posts.push({ urn, text, author, authorTitle, dateStr, permalink });
+        });
+
+        return posts;
       });
-
-      return posts;
-    });
+    } catch {
+      return [];
+    }
 
     for (const p of rawPosts) {
       if (seenPostUrns.has(p.urn)) continue;
@@ -269,7 +306,7 @@ export class LinkedInPostsScraper implements JobScraper {
       seenPostUrns.add(p.urn);
 
       // Gerar título amigável baseado na primeira linha significativa do post
-      const candidateLines = p.text.split('\n').map((l) => l.trim()).filter((l) => l.length > 5);
+      const candidateLines = p.text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 5);
       const firstLine = candidateLines[0] || 'Oportunidade em LinkedIn Post';
       const title = firstLine.length > 80 ? firstLine.substring(0, 77) + '...' : firstLine;
       

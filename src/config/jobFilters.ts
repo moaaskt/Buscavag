@@ -276,3 +276,19 @@ export function isTechJob(title: string): boolean {
   }
   return matchesWhitelist(title).matched;
 }
+
+/**
+ * Filtro rígido de fontes/plataformas bloqueadas (ex: fontes pagas como beBee).
+ */
+export function isBlacklistedSource(platform?: string, company?: string, url?: string): boolean {
+  const p = (platform || '').toLowerCase();
+  const c = (company || '').toLowerCase();
+  const u = (url || '').toLowerCase();
+
+  // beBee (fonte paga / desativada)
+  if (p === 'bebee' || p.includes('bebee') || c.includes('bebee') || u.includes('bebee.com')) {
+    return true;
+  }
+
+  return false;
+}
