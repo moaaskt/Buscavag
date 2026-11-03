@@ -306,7 +306,7 @@ export class LinkedInPostsScraper implements JobScraper {
       seenPostUrns.add(p.urn);
 
       // Gerar título amigável baseado na primeira linha significativa do post
-      const candidateLines = p.text.split('\n').map((l) => l.trim()).filter((l) => l.length > 5);
+      const candidateLines = p.text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 5);
       const firstLine = candidateLines[0] || 'Oportunidade em LinkedIn Post';
       const title = firstLine.length > 80 ? firstLine.substring(0, 77) + '...' : firstLine;
       

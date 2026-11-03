@@ -638,7 +638,8 @@ export class CandidateMatcher {
           matchedSkills.push(skill);
         }
       }
-      stackScore = genericMatches > 0 ? 80 : 50;
+      const isSoftwareDevJob = /\b(dev|developer|desenvolvedor|programador|software|integra|full\s*stack|web)\b/i.test(jobTitle);
+      stackScore = genericMatches > 0 ? 80 : (isSoftwareDevJob ? 70 : 50);
     }
 
     // 3. Cálculo de Alinhamento de Cargo e Título (20% do peso total)

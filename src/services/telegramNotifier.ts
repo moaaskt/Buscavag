@@ -157,7 +157,13 @@ export class TelegramNotifier {
 
     // 2. Trava estrita de Stack e Tech
     // Exige aderência de stack (>= 60) e score geral mínimo (>= 60)
-    if (match.stackScore < 60) {
+    const isExplicitJuniorDev = (
+      job.isJuniorFullStack === true ||
+      job.is_junior_fullstack === 1 ||
+      /\b(j[úu]nior|jr)\b/i.test(titleLower)
+    ) && /\b(dev|developer|desenvolvedor|programador|software|integra|full\s*stack|frontend|backend)\b/i.test(titleLower);
+
+    if (match.stackScore < 60 && !isExplicitJuniorDev) {
       return {
         eligible: false,
         reason: `Aderência de stack insuficiente (${match.stackScore}% < 60%) para o perfil`,

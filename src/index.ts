@@ -183,7 +183,6 @@ export async function runPipeline(customLogger?: ScraperLogger, targetScraperNam
       const sent = await notifier.sendNotification(job);
       repo.markAsNotified(job.id);
       if (sent) {
-        repo.markAsNotified(job.id);
         console.log(`  ✓ Notificada: "${job.title}" (${job.company})`);
         logger.info(`Notificação enviada: "${job.title}" (${job.company})`, {
           step: 'PROGRESS',
