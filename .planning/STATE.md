@@ -1,10 +1,15 @@
 # Project Memory & State
 
 ## Current Position
-- **Last Completed Milestone**: v23.0 — Filtragem Estrita, Deduplicação Inteligente, Precisão Geográfica & Arquitetura de Sub-Navegação (2026-10-27)
+- **Last Completed Milestone**: v24.0 — Sidebar Retrátil Inovadora, Telegram Notifier Estrito & LinkedIn Posts Scraper (2026-11-02)
 - **Current Milestone**: Nenhum ativo no momento
-- **Current Status**: Milestone 23.0 arquivado com 100% de sucesso e auditado (v23.0-MILESTONE-AUDIT.md).
-- **Next Step**: Iniciar o próximo ciclo com `/gsd-new-milestone`.
+- **Current Status**: Milestone 24.0 arquivado com 100% de sucesso e auditado (v24.0-MILESTONE-AUDIT.md).
+- **Next Step**: Iniciar o próximo ciclo com /gsd-new-milestone.
+
+## Milestone 24.0 Phases (Archived ✓)
+- [x] **Phase 96**: Sidebar Retrátil Inovadora & Otimização de Espaçamentos Globais (Concluído em 2026-11-02)
+- [x] **Phase 97**: Telegram Notifier Estrito & Dispatch em Tempo Real (moacirneto59@gmail.com) (Concluído em 2026-11-02)
+- [x] **Phase 98**: Scraper de Feed/Posts do LinkedIn Autenticado (li_at) & Runner de 3 em 3 Horas (Concluído em 2026-11-02)
 
 ## Milestone 23.0 Phases (Archived ✓)
 - [x] **Phase 91**: Refatoração Rigorosa do Fallback Heurístico & Blacklist Não-Tech (Concluído em 2026-10-01)
