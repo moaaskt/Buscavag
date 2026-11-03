@@ -148,6 +148,15 @@ export default function LoginPage() {
                 Cadastre-se gratuitamente
               </Link>
             </div>
+            <div className="mt-4 pt-4 border-t border-zinc-200/80 dark:border-zinc-800/80 text-center">
+              <Link
+                href="/admin/login"
+                className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 font-medium hover:underline transition-colors font-mono"
+              >
+                <span>⚡ Acessar Painel Admin (/admin/login)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
         </div>
       </div>
     </div>
