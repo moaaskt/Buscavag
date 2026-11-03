@@ -36,7 +36,8 @@ export class LinkedInPostsScraper implements JobScraper {
       const hasCookies = await this.injectSessionCookies(context);
       
       if (!hasCookies) {
-        console.warn('[LinkedInPostsScraper] unauthorized: Nenhum cookie de sessão ("li_at" / "LINKEDIN_SESSION_COOKIE") encontrado no .env ou li-cookies.json. O LinkedIn bloqueará a pesquisa de publicações.');
+        console.warn('[LinkedInPostsScraper] ℹ️ Nenhum cookie de sessão ("li_at" / "LINKEDIN_SESSION_COOKIE") válido encontrado no .env. A busca de posts requer sessão ativa.');
+        return [];
       }
 
       // 2. Otimização de Recursos: Bloquear mídias pesadas
@@ -50,10 +51,12 @@ export class LinkedInPostsScraper implements JobScraper {
 
       try {
         await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
-      } catch (navErr) {
-        console.warn('[LinkedInPostsScraper] Aviso no carregamento inicial, limpando cookies de teste e tentando fallback anônimo:', (navErr as Error).message);
-        await context.clearCookies();
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+      } catch (navErr: any) {
+        if (navErr.message?.includes('ERR_TOO_MANY_REDIRECTS') || navErr.message?.includes('chrome-error')) {
+          console.warn('[LinkedInPostsScraper] ⚠️ O cookie li_at configurado expirou ou foi invalidado pelo LinkedIn (ERR_TOO_MANY_REDIRECTS). Atualize a chave LINKEDIN_SESSION_COOKIE no .env.');
+          return [];
+        }
+        throw navErr;
       }
       await page.waitForTimeout(3500); // Esperar carregamento inicial da interface React
 
