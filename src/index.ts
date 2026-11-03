@@ -4,7 +4,7 @@ import { JobRepository } from './db/repository.js';
 import { HermesEvaluator } from './services/hermesEvaluator.js';
 import { TelegramNotifier } from './services/telegramNotifier.js';
 import { isOlderThanDays } from './utils/date.js';
-import { matchesBlacklist, matchesWhitelist, isTechJob } from './config/jobFilters.js';
+import { matchesBlacklist, matchesWhitelist, isTechJob, isBlacklistedSource } from './config/jobFilters.js';
 import { ScraperLogger } from './services/scraperLogger.js';
 
 dotenv.config();
@@ -57,6 +57,11 @@ export async function runPipeline(customLogger?: ScraperLogger, targetScraperNam
 
   for (const job of rawJobs) {
     if (isOlderThanDays(job.publishedAt, 2)) {
+      continue;
+    }
+
+    // Filtro 0: Bloqueio estrito de fontes desativadas/pagas (ex: beBee)
+    if (isBlacklistedSource(job.platform, job.company, job.url)) {
       continue;
     }
 

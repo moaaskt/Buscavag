@@ -21,7 +21,8 @@
     "clean:ports": "fuser -k 3000/tcp 2>/dev/null || true",
     "kill:zombies": "pkill -f 'next dev|tsx' 2>/dev/null || fuser -k 3000/tcp 2>/dev/null || true",
     "clean:all": "npm run kill:zombies && npm run clean:ports",
-    "scrape:linkedin-posts": "tsx src/index.ts --target \"LinkedIn Posts\""
+    "scrape:linkedin-posts": "tsx src/index.ts --target \"LinkedIn Posts\"",
+    "auth:linkedin": "tsx scripts/auth-linkedin.ts"
   },
   "keywords": [],
   "author": "",
