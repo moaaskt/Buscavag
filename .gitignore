@@ -36,3 +36,4 @@ data/*.db-wal
 # Uploads
 uploads/resumes/*
 !uploads/resumes/.gitkeep
+CLAUDE.md
