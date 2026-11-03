@@ -54,3 +54,4 @@ export function AppHeader({ onOpenMobile }: AppHeaderProps) {
     </header>
   );
 }
+

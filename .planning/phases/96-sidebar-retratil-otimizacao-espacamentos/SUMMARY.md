@@ -19,3 +19,4 @@
 ## Verificação e Testes
 - Build TypeScript / Next.js executado com sucesso (`cmd /c "npm run build"` concluído com status 0).
 - Compatibilidade com temas escuro e claro preservada com classes Tailwind e persistência em `localStorage`.
+
