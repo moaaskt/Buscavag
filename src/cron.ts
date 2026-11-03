@@ -5,7 +5,7 @@ import { TelegramNotifier } from './services/telegramNotifier.js';
 
 dotenv.config();
 
-const CRON_SCHEDULE = process.env.CRON_SCHEDULE || '0 */4 * * *'; // A cada 4 horas por padrão
+const CRON_SCHEDULE = process.env.CRON_SCHEDULE || '0 */3 * * *'; // A cada 3 horas por padrão
 const notifier = new TelegramNotifier();
 
 console.log(`\n🕐 [CRON] Buscavag Scheduler iniciado.`);

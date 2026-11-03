@@ -20,7 +20,8 @@
     "audit:scrapers": "tsx scripts/audit-scrapers.ts",
     "clean:ports": "fuser -k 3000/tcp 2>/dev/null || true",
     "kill:zombies": "pkill -f 'next dev|tsx' 2>/dev/null || fuser -k 3000/tcp 2>/dev/null || true",
-    "clean:all": "npm run kill:zombies && npm run clean:ports"
+    "clean:all": "npm run kill:zombies && npm run clean:ports",
+    "scrape:linkedin-posts": "cross-env SCRAPER_TARGET=\"LinkedIn Posts\" tsx src/index.ts"
   },
   "keywords": [],
   "author": "",
