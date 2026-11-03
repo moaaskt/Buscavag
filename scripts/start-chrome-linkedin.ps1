@@ -71,3 +71,4 @@ Write-Host "4. O Buscavag se conectará a ela pela porta 9222 sem acionar checkp
 Write-Host ""
 Write-Host "🚀 Pronto! O scraper do LinkedIn agora pode rodar a qualquer momento." -ForegroundColor Green
 Write-Host ""
+
