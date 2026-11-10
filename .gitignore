@@ -40,3 +40,7 @@ data/*.db-wal
 uploads/resumes/*
 !uploads/resumes/.gitkeep
 CLAUDE.md
+
+data/linkedin-*.json
+data/scrapling-alert-cooldown.json
+admincn-v1.0.0
