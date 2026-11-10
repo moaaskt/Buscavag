@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+
 export type { JobScraper } from './base.js';
 export { GupyScraper } from './gupy.js';
 export { LinkedInScraper } from './linkedin.js';
@@ -83,6 +86,8 @@ import { runWithConcurrencyLimit, withTimeout } from '../utils/concurrency.js';
 import { ScraperLogger } from '../services/scraperLogger.js';
 import { PythonBridgeClient } from '../services/pythonBridge.js';
 
+const SCRAPLING_ALERT_COOLDOWN_FILE = path.resolve(process.cwd(), 'data', 'scrapling-alert-cooldown.json');
+
 export interface OrchestratorOptions {
   concurrency?: number;
   timeoutPerScraperMs?: number;
@@ -110,7 +115,6 @@ export class ScraperOrchestrator {
   constructor(notifier?: TelegramNotifier, options?: OrchestratorOptions) {
     this.pythonBridge = options?.pythonBridge || new PythonBridgeClient();
     this.scrapers = [
-
       new GupyScraper(),
       new LinkedInScraper(),
       new IndeedScraper(),
@@ -154,7 +158,6 @@ export class ScraperOrchestrator {
       new LinkedInPostsScraper(),
     ];
 
-
     this.notifier = notifier || new TelegramNotifier();
     this.concurrency = options?.concurrency || 5;
     this.timeoutPerScraperMs = options?.timeoutPerScraperMs || 45000;
@@ -195,7 +198,7 @@ export class ScraperOrchestrator {
     this.logger.info(
       targetScraperName
         ? `Iniciando execução individual do conector "${scrapersToRun[0].name}"...`
-        : `Iniciando execução paralela de ${scrapersToRun.length} scrapers (Concorrência: ${this.concurrency}, Timeout: ${this.timeoutPerScraperMs / 1000}s)...`,
+        : `Iniciando execução paralela de ${scrapersToRun.length} scrapers (Concorrência: ${this.concurrency}, Timeout padrão: ${this.timeoutPerScraperMs / 1000}s)...`,
       {
         step: 'START',
         data: { totalScrapers: scrapersToRun.length, concurrency: this.concurrency, pythonEngineOnline: isPythonAvailable },
@@ -205,6 +208,7 @@ export class ScraperOrchestrator {
     const startTime = Date.now();
     const metrics: ScraperExecutionMetric[] = [];
     const allJobs: RawJob[] = [];
+    const failedScrapers: Array<{ name: string; engine: string; error: string }> = [];
 
     const results = await runWithConcurrencyLimit(scrapersToRun, this.concurrency, async (scraper) => {
       const scraperLogger = this.logger.forScraper(scraper.name);
@@ -213,9 +217,12 @@ export class ScraperOrchestrator {
       const shouldUsePython = Boolean(scraper.requiresPython && isPythonAvailable);
       const engineName = shouldUsePython ? 'python' : 'node';
 
-      scraperLogger.info(`Buscando vagas em ${scraper.name} (Motor: ${engineName.toUpperCase()})...`, {
+      // Timeout próprio por scraper (ex.: LinkedIn Posts usa 180s, outros usam 45s)
+      const scraperTimeout = scraper.timeoutMs || this.timeoutPerScraperMs;
+
+      scraperLogger.info(`Buscando vagas em ${scraper.name} (Motor: ${engineName.toUpperCase()}, Timeout: ${scraperTimeout / 1000}s)...`, {
         step: 'START',
-        data: { scraper: scraper.name, engine: engineName },
+        data: { scraper: scraper.name, engine: engineName, timeoutMs: scraperTimeout },
       });
 
       try {
@@ -230,8 +237,8 @@ export class ScraperOrchestrator {
 
         const jobs = await withTimeout(
           scrapePromise,
-          this.timeoutPerScraperMs,
-          `Tempo limite excedido (${this.timeoutPerScraperMs / 1000}s)`
+          scraperTimeout,
+          `Tempo limite excedido (${scraperTimeout / 1000}s)`
         );
 
         const durationMs = Date.now() - scraperStart;
@@ -253,7 +260,6 @@ export class ScraperOrchestrator {
         const durationMs = Date.now() - scraperStart;
         const errorMsg = (err as Error).message || String(err);
         
-        // Log estruturado com level ERROR e stack trace
         scraperLogger.error(`Falha no scraper ${scraper.name} (${engineName.toUpperCase()}) após ${(durationMs / 1000).toFixed(1)}s: ${errorMsg}`, err, {
           data: { scraper: scraper.name, durationMs, engine: engineName },
         });
@@ -267,16 +273,15 @@ export class ScraperOrchestrator {
           engine: engineName,
         });
 
-        // Enviar alerta não bloqueante no Telegram
-        const alertText = `⚠️ [ALERTA] O scraper ${scraper.name} (${engineName}) falhou: ${errorMsg}`;
-        this.notifier.sendAlert(alertText).catch((telegramErr) => {
-          console.warn(`[ScraperOrchestrator] Erro ao enviar alerta Telegram:`, (telegramErr as Error).message);
+        failedScrapers.push({
+          name: scraper.name,
+          engine: engineName,
+          error: errorMsg,
         });
 
         return [] as RawJob[];
       }
     });
-
 
     for (const jobBatch of results) {
       allJobs.push(...jobBatch);
@@ -291,6 +296,79 @@ export class ScraperOrchestrator {
       data: { totalJobs: allJobs.length, successCount, errorCount, durationSeconds: Number(totalDuration) },
     });
 
+    // Envio CONSOLIDADO de alerta se houver falhas no ciclo
+    if (failedScrapers.length > 0) {
+      await this.dispatchConsolidatedAlerts(failedScrapers);
+    }
+
     return allJobs;
+  }
+
+  /**
+   * Consolida as falhas do ciclo em uma única mensagem de alerta para o Telegram,
+   * tratando falhas por Scrapling Engine desligado com cooldown de 1h sem spam.
+   */
+  private async dispatchConsolidatedAlerts(failures: Array<{ name: string; engine: string; error: string }>): Promise<void> {
+    const isScraplingFailure = (err: string) =>
+      err.includes('ECONNREFUSED') && (err.includes('8001') || err.includes('127.0.0.1:8001'));
+
+    const scraplingFailures = failures.filter((f) => isScraplingFailure(f.error));
+    const otherFailures = failures.filter((f) => !isScraplingFailure(f.error));
+
+    let canAlertScrapling = false;
+    if (scraplingFailures.length > 0) {
+      canAlertScrapling = this.checkScraplingCooldown();
+    }
+
+    // Se só tiver erro do Scrapling Engine e estiver em cooldown de 1h, não incomoda o usuário
+    if (otherFailures.length === 0 && !canAlertScrapling) {
+      return;
+    }
+
+    const lines: string[] = ['⚠️ <b>[RESUMO DE FALHAS NO PIPELINE DE COLETA]</b>\n'];
+
+    if (scraplingFailures.length > 0 && canAlertScrapling) {
+      const names = scraplingFailures.map((f) => f.name).join(', ');
+      lines.push(`🚨 <b>Scrapling Engine desligado</b> (ECONNREFUSED 127.0.0.1:8001)`);
+      lines.push(`   <i>Conectores afetados: ${names}</i>\n`);
+      this.recordScraplingAlertTime();
+    }
+
+    if (otherFailures.length > 0) {
+      lines.push(`📌 <b>Outras falhas (${otherFailures.length}):</b>`);
+      for (const f of otherFailures) {
+        lines.push(`• <b>${f.name}</b> (${f.engine}): ${f.error}`);
+      }
+    }
+
+    const consolidatedMessage = lines.join('\n');
+    this.notifier.sendAlert(consolidatedMessage).catch((err) => {
+      console.warn('[ScraperOrchestrator] Erro ao enviar alerta consolidado Telegram:', (err as Error).message);
+    });
+  }
+
+  private checkScraplingCooldown(): boolean {
+    try {
+      if (fs.existsSync(SCRAPLING_ALERT_COOLDOWN_FILE)) {
+        const data = JSON.parse(fs.readFileSync(SCRAPLING_ALERT_COOLDOWN_FILE, 'utf-8'));
+        const ageMs = Date.now() - (data.lastAlertMs || 0);
+        if (ageMs < 60 * 60 * 1000) {
+          return false; // Cooldown de 1 hora ativo
+        }
+      }
+    } catch {}
+    return true;
+  }
+
+  private recordScraplingAlertTime(): void {
+    try {
+      const dir = path.dirname(SCRAPLING_ALERT_COOLDOWN_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        SCRAPLING_ALERT_COOLDOWN_FILE,
+        JSON.stringify({ lastAlertMs: Date.now(), timestamp: new Date().toISOString() }, null, 2),
+        'utf-8'
+      );
+    } catch {}
   }
 }

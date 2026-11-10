@@ -9,6 +9,7 @@ export interface JobScraper {
   name: string;
   requiresPython?: boolean;
   pythonSourceName?: string;
+  timeoutMs?: number;
   scrape(): Promise<RawJob[]>;
 }
 

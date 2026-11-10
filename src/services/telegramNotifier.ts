@@ -1,7 +1,7 @@
 import { Bot } from 'grammy';
-import { ProcessedJob } from '../types/job.js';
-import { db } from '../db/index.js';
-import { CandidateMatcher, CandidateContext, CandidateMatchResult } from './candidateMatcher.js';
+import { ProcessedJob } from '../types/job';
+import { db } from '../db/index';
+import { CandidateMatcher, CandidateContext, CandidateMatchResult } from './candidateMatcher';
 import crypto from 'crypto';
 
 export class TelegramNotifier {
@@ -206,6 +206,9 @@ export class TelegramNotifier {
 
     const loc = job.location || (job as any).city ? `${(job as any).city || ''} ${(job as any).state || ''}`.trim() : 'Não especificado';
     const pubDate = job.publishedAt instanceof Date ? job.publishedAt.toLocaleDateString('pt-BR') : String(job.publishedAt || '');
+    const contactLine = (job as any).directContact
+      ? `📧 <b>Contato:</b> <code>${this.escapeHtml((job as any).directContact)}</code>\n`
+      : '';
 
     return `🚨 <b>NOVA VAGA ENCONTRADA (MATCH JÚNIOR)!</b>\n\n` +
            `📌 <b>Título:</b> ${this.escapeHtml(job.title)}\n` +
@@ -214,6 +217,7 @@ export class TelegramNotifier {
            `📍 <b>Local:</b> ${this.escapeHtml(loc || 'Não especificado')}\n` +
            `📅 <b>Publicado em:</b> ${pubDate}\n` +
            `${categoryBadge}` +
+           `${contactLine}` +
            `${matchSection}\n` +
            `🔗 <a href="${job.url}">Clique aqui para ver a vaga</a>`;
   }
