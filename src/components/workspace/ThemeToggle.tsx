@@ -10,8 +10,14 @@ export function ThemeToggle() {
 
   useEffect(() => {
     setMounted(true);
-    const hasDarkClass = document.documentElement.classList.contains('dark');
-    setIsDark(hasDarkClass);
+    const storedTheme = localStorage.getItem('buscavag_theme');
+    if (storedTheme === 'light') {
+      document.documentElement.classList.remove('dark');
+      setIsDark(false);
+    } else {
+      document.documentElement.classList.add('dark');
+      setIsDark(true);
+    }
   }, []);
 
   const toggleTheme = () => {

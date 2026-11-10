@@ -22,6 +22,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -258,27 +259,29 @@ export function WorkspaceSidebar() {
                   align="end"
                   className="w-56 p-1.5"
                 >
-                  <DropdownMenuLabel className="font-normal p-2">
-                    <div className="flex flex-col space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold leading-none text-foreground truncate">
-                          {activeProfile.name}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="font-normal p-2">
+                      <div className="flex flex-col space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold leading-none text-foreground truncate">
+                            {activeProfile.name}
+                          </p>
+                          <span
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium tracking-wide uppercase ${
+                              activeProfile.role === 'ADMIN'
+                                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                                : 'bg-primary/10 text-primary border border-primary/20'
+                            }`}
+                          >
+                            {activeProfile.role}
+                          </span>
+                        </div>
+                        <p className="text-[11px] leading-none text-muted-foreground truncate">
+                          {activeProfile.email}
                         </p>
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium tracking-wide uppercase ${
-                            activeProfile.role === 'ADMIN'
-                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                              : 'bg-primary/10 text-primary border border-primary/20'
-                          }`}
-                        >
-                          {activeProfile.role}
-                        </span>
                       </div>
-                      <p className="text-[11px] leading-none text-muted-foreground truncate">
-                        {activeProfile.email}
-                      </p>
-                    </div>
-                  </DropdownMenuLabel>
+                    </DropdownMenuLabel>
+                  </DropdownMenuGroup>
                   <DropdownMenuSeparator />
 
                   <DropdownMenuItem
