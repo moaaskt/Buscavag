@@ -2,11 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
 import { ScraperLogger } from '@/services/scraperLogger';
+import { checkAdminSessionSecurity } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    const sessionCheck = await checkAdminSessionSecurity(request);
+    if (!sessionCheck.success || !sessionCheck.data) {
+      if (sessionCheck.conflict) {
+        return NextResponse.json(
+          { success: false, error: sessionCheck.error, conflict: true },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json(
+        { success: false, error: 'Sessão administrativa ausente ou inválida' },
+        { status: 401 }
+      );
+    }
     let runId = '';
     let scraperName = '';
     try {

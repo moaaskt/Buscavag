@@ -56,44 +56,44 @@
   }
 
   .dark {
-    /* Base Dark Theme - Preservado para manter 100% retrocompatibilidade */
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
+    /* shadcn Base Nova Dark Theme - Neutral & Near-Black (sem tons azulados/ciano) */
+    --background: 0 0% 9%;          /* oklch(0.145 0 0) - superfície principal quase preta */
+    --foreground: 0 0% 98%;         /* oklch(0.985 0 0) - tipografia branco suave */
 
-    --card: 224 71% 4%;
-    --card-foreground: 213 31% 91%;
+    --card: 0 0% 11.5%;             /* oklch(0.205 0 0) - cards com superfície escura neutra */
+    --card-foreground: 0 0% 98%;
 
-    --popover: 224 71% 4%;
-    --popover-foreground: 213 31% 91%;
+    --popover: 0 0% 11.5%;          /* menus, dropdowns e popovers neutros */
+    --popover-foreground: 0 0% 98%;
 
-    --primary: 191 97% 40%; /* Cyan-500 */
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 0 0% 98%;            /* base-nova dark: botões primários em branco suave com texto escuro */
+    --primary-foreground: 0 0% 9%;
 
-    --secondary: 262 80% 50%; /* Violet-500 */
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 0 0% 15%;          /* superfícies secundárias neutras */
+    --secondary-foreground: 0 0% 98%;
 
-    --muted: 223 47% 11%;
-    --muted-foreground: 215.4 16.3% 56.9%;
+    --muted: 0 0% 15%;              /* backgrounds sutis para áreas secundárias/desabilitadas */
+    --muted-foreground: 0 0% 64%;   /* texto auxiliar legível com contraste WCAG AA > 5:1 */
 
-    --accent: 223 47% 11%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 0 0% 15%;             /* hover/seleção neutro sutil */
+    --accent-foreground: 0 0% 98%;
 
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 216 34% 17%;
-    --input: 216 34% 17%;
-    --ring: 191 97% 40%;
+    --border: 0 0% 17%;             /* oklch(1 0 0 / 10%) - bordas sutis e discretas sem brilho azulado */
+    --input: 0 0% 17%;
+    --ring: 0 0% 55%;               /* anel de foco neutro */
 
-    /* Workspace Sidebar Tokens - Dark */
-    --sidebar-background: 224 71% 4%;
-    --sidebar-foreground: 240 4.8% 90%;
-    --sidebar-primary: 224 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 223 47% 11%;
-    --sidebar-accent-foreground: 240 4.8% 90%;
-    --sidebar-border: 216 34% 17%;
-    --sidebar-ring: 191 97% 40%;
+    /* Workspace Sidebar Tokens - Base Nova Dark */
+    --sidebar-background: 0 0% 9%;  /* integrado perfeitamente ao fundo */
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 0 0% 9%;
+    --sidebar-accent: 0 0% 15%;     /* hover neutro nos itens da sidebar */
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 16%;     /* divisor sutil entre sidebar e conteúdo */
+    --sidebar-ring: 0 0% 55%;
   }
 }
 
@@ -113,14 +113,25 @@
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #090d16;
+  background: hsl(0 0% 96%);
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: hsl(0 0% 80%);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: hsl(0 0% 70%);
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: hsl(0 0% 9%);
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(0 0% 20%);
+  border-radius: 4px;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(0 0% 28%);
 }
 
 /* Glassmorphism helpers */

@@ -65,7 +65,8 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Verifica sessão administrativa (admin_session validada no SQLite admin_sessions)
-    const adminSessionData = await getAdminSessionUser(req);
+    // Permite allowConflict: true pois este endpoint é a autoridade de diagnóstico do conflito
+    const adminSessionData = await getAdminSessionUser(req, { allowConflict: true });
     const validAdminUser = adminSessionData?.user || null;
 
     const hasCandidate = Boolean(validCandidateUser);

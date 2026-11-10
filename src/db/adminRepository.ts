@@ -119,6 +119,40 @@ export class AdminRepository {
     return selectStmt.get(id) as AdminSession;
   }
 
+  /**
+   * Rotaciona uma sessão administrativa atomicamente dentro de uma única transação SQLite.
+   * Se a deleção da sessão anterior ou inserção da nova falhar, tudo sofre rollback automático.
+   */
+  rotateSessionAtomic(oldSessionId: string, newSessionData: CreateAdminSessionDTO): AdminSession {
+    const rotateTx = db.transaction(() => {
+      // 1. Revoga a sessão antiga
+      const delStmt = db.prepare('DELETE FROM admin_sessions WHERE id = ?');
+      delStmt.run(oldSessionId);
+
+      // 2. Insere a nova sessão
+      const newId = newSessionData.id || crypto.randomUUID();
+      const now = new Date().toISOString();
+      const insStmt = db.prepare(`
+        INSERT INTO admin_sessions (id, admin_user_id, token_hash, ip_address, user_agent, expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      insStmt.run(
+        newId,
+        newSessionData.admin_user_id,
+        newSessionData.token_hash,
+        newSessionData.ip_address || null,
+        newSessionData.user_agent || null,
+        newSessionData.expires_at,
+        now
+      );
+
+      const selectStmt = db.prepare('SELECT * FROM admin_sessions WHERE id = ?');
+      return selectStmt.get(newId) as AdminSession;
+    });
+
+    return rotateTx();
+  }
+
   getSessionByTokenHash(tokenHash: string): AdminSession | null {
     const stmt = db.prepare('SELECT * FROM admin_sessions WHERE token_hash = ?');
     return (stmt.get(tokenHash) as AdminSession) || null;

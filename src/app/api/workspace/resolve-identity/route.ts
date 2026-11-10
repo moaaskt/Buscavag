@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const adminSessionData = await getAdminSessionUser(req);
+    const adminSessionData = await getAdminSessionUser(req, { allowConflict: true });
     if (adminSessionData) {
       const targetSessionId = adminSessionData.session.id;
 
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
   // AÇÃO 2: Continuar como Administrador (Revalida o MESMO admin_user_id)
   // ---------------------------------------------------------------------------
   if (payload.action === 'choose_admin') {
-    const adminSessionData = await getAdminSessionUser(req);
+    const adminSessionData = await getAdminSessionUser(req, { allowConflict: true });
     if (!adminSessionData) {
       return NextResponse.json(
         {
@@ -230,8 +230,7 @@ export async function POST(req: NextRequest) {
     });
 
     try {
-      adminRepo.revokeSession(conflictingSession.id);
-      adminRepo.createSession({
+      adminRepo.rotateSessionAtomic(conflictingSession.id, {
         id: newSessionId,
         admin_user_id: freshAdminRecord.id,
         token_hash: tokenHash,
@@ -240,7 +239,7 @@ export async function POST(req: NextRequest) {
         expires_at: expiresAt,
       });
     } catch (err: any) {
-      logger.error('admin-auth', `Erro ao rotacionar sessão admin na resolução: ${err.message}`, { req });
+      logger.error('admin-auth', `Erro ao rotacionar sessão admin atomicamente na resolução: ${err.message}`, { req });
       return NextResponse.json(
         {
           success: false,
@@ -293,7 +292,7 @@ export async function POST(req: NextRequest) {
   // ---------------------------------------------------------------------------
   // AÇÃO 3: Encerrar Todas as Sessões
   // ---------------------------------------------------------------------------
-  const adminSessionData = await getAdminSessionUser(req);
+  const adminSessionData = await getAdminSessionUser(req, { allowConflict: true });
   let dbRevocationFailed = false;
 
   if (adminSessionData) {

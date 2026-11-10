@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning className={cn("font-sans", geist.variable)}>
+    <html lang="pt-BR" suppressHydrationWarning className={cn("dark", "font-sans", geist.variable)}>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -35,7 +35,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen antialiased bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 transition-colors">
+      <body className="min-h-screen antialiased bg-background text-foreground transition-colors">
         <TooltipProvider>
           {children}
           <SyncToast />

@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
   try {
-    const sessionData = await getAdminSessionUser(req);
+    const sessionData = await getAdminSessionUser(req, { allowConflict: true });
     const repo = new AdminRepository();
 
     if (sessionData) {
