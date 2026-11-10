@@ -2,8 +2,9 @@
 
 ## Current State
 
-- **Shipped Milestone**: v23.0 — Filtragem Estrita, Deduplicação Inteligente, Precisão Geográfica & Arquitetura de Sub-Navegação (2026-10-27)
-- **Active Milestone**: Nenhum marco ativo no momento. Inicie o próximo ciclo com `/gsd-new-milestone`.
+- **Shipped Milestone**: v24.0 — Sidebar Retrátil Inovadora, Telegram Notifier Estrito & LinkedIn Posts Scraper (2026-11-02)
+- **Active Milestone**: v25.0 — Personal Workspace & Redesign AdminCN (shadcn/ui)
+- **Status**: Em Planejamento / Governança Atualizada (Fase 99 pronta para início)
 
 <details>
 <summary>Previous Milestones</summary>
@@ -32,9 +33,15 @@
 - v21.1 — Polimento & Consolidação UI/UX Admin (Design System, Isolamento de Layout, B2B & Ações de Canais) (2026-09-30)
 - v22.0 — Refatoração da Dashboard Admin & Criação da Central Exclusiva de Scrapers (2026-10-01)
 - v23.0 — Filtragem Estrita, Deduplicação Inteligente, Precisão Geográfica & Arquitetura de Sub-Navegação (2026-10-27)
+- v24.0 — Sidebar Retrátil Inovadora, Telegram Notifier Estrito & LinkedIn Posts Scraper (2026-11-02)
 
 </details>
 
-## Next Milestone Goals
+## Next Milestone Goals (v25.0)
 
-- Aguardando definição do próximo marco com `/gsd-new-milestone`.
+- **Transformação para Personal Workspace**: Unificação dos painéis antes segregados (`/candidate` e `/admin`) em uma casca de aplicação única (Single App Shell), eliminando atritos de navegação e múltiplas sessões.
+- **Descomissionamento Comercial Seguro**: Eliminação da lógica de planos pagos, assinaturas artificiais e gates Free/Pro da experiência de uso, preservando 100% dos dados históricos e financeiros no SQLite sem exclusão de tabelas.
+- **Redesign com Base no AdminCN & shadcn/ui**: Adoção do Design System definitivo baseado no template local `admincn-v1.0.0` e componentes oficiais shadcn/ui, garantindo visual minimalista, profissional, responsivo e sem estética genérica de IA.
+- **Skill Permanente & Governança GSD**: Criação da skill `buscavag-design-system` para assegurar que futuros agentes sigam estritamente o Design System, tokens e checklist de validação visual.
+- **Preservação Integral de Funcionalidades & RBAC**: Garantia de não-regressão em scraping (34 conectores), inteligência Hermes/Gemini, mensageria (Telegram/WhatsApp) e diferenciação estrita de permissões via RBAC fundamentado no código.
+- **Responsividade Universal**: Validação obrigatória de todas as telas em Desktop, Tablet e Mobile.
