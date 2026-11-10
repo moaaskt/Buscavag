@@ -133,7 +133,11 @@ export async function runPipeline(customLogger?: ScraperLogger, targetScraperNam
     });
 
     // Inserir no banco de dados com análise enriquecida neutra
-    repo.insert(job, evalResult);
+    const inserted = repo.insert(job, evalResult);
+    if ((job as any).isSeedBatch === true && inserted?.id) {
+      repo.markAsNotified(inserted.id);
+      console.log(`   🌱 [MODO SEMENTE] Vaga salva sem disparo no Telegram: "${job.title}"`);
+    }
   }
 
   const statsMsg = `Estatísticas do ciclo: ${rawJobs.length} coletadas, ${blacklistFilteredCount + whitelistFilteredCount} pré-filtradas, ${duplicateFilteredCount} duplicadas descartadas, ${evaluatedCount} avaliadas, ${discardedNonTechCount} descartadas por não-tech, ${approvedCount} aprovadas no DB.`;

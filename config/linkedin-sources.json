@@ -1,6 +1,63 @@
 {
   "maxSourcesPerCycle": 10,
   "maxPostsPerCycle": 40,
+  "maxDaysOld": 7,
+  "timeoutBaseSeconds": 60,
+  "timeoutPerSourceSeconds": 35,
+  "maxMenuClicksPerSource": 5,
+  "strongKeywords": [
+    "estamos contratando",
+    "estamos buscando",
+    "envie seu currículo",
+    "envie seu curriculo",
+    "envie seu cv",
+    "candidate-se",
+    "processo seletivo",
+    "abrimos vaga",
+    "possuo vaga",
+    "we are hiring",
+    "hiring"
+  ],
+  "weakKeywords": [
+    "vaga",
+    "vagas",
+    "oportunidade",
+    "oportunidades",
+    "dev",
+    "desenvolvedor",
+    "desenvolvedora",
+    "programador",
+    "programadora",
+    "remoto",
+    "júnior",
+    "junior",
+    "pleno",
+    "sênior",
+    "senior",
+    "home office",
+    "clt",
+    "pj",
+    "fullstack",
+    "full stack",
+    "frontend",
+    "backend"
+  ],
+  "negativeKeywords": [
+    "evento",
+    "webinar",
+    "stand",
+    "estande",
+    "palestra",
+    "parabéns",
+    "parabens",
+    "aniversário",
+    "aniversario",
+    "feliz dia",
+    "patrocínio",
+    "patrocinio",
+    "febraban",
+    "feira"
+  ],
   "sources": [
     {
       "name": "Helton Chagas",
@@ -14,4 +71,3 @@
     }
   ]
 }
-
