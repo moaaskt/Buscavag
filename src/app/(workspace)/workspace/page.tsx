@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useWorkspaceSession } from '@/components/workspace/WorkspaceSessionContext';
-import { WORKSPACE_NAV_GROUPS } from '@/configs/workspaceNavConfig';
+import { WORKSPACE_NAV_GROUPS, type WorkspaceNavItem } from '@/configs/workspaceNavConfig';
 import { Button } from '@/components/ui/button';
 import { ConflictResolutionDialog } from '@/components/workspace/ConflictResolutionDialog';
 import {
@@ -16,6 +16,7 @@ import {
   SparklesIcon,
   LockIcon,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export default function WorkspaceHubPage() {
   const { session, isLoading } = useWorkspaceSession();
@@ -104,48 +105,84 @@ export default function WorkspaceHubPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {WORKSPACE_NAV_GROUPS.map((group) => {
             const isGroupLocked = group.adminOnly && !canAccessAdmin;
+            const isFeatured = group.id === 'carreira';
 
             return (
               <div
                 key={group.id}
-                className={`rounded-xl border p-5 shadow-xs transition-all flex flex-col justify-between ${
+                className={cn(
+                  'rounded-xl border p-5 shadow-xs transition-all flex flex-col justify-between bg-card',
+                  isFeatured ? 'md:col-span-2 lg:col-span-2' : 'col-span-1',
                   isGroupLocked
-                    ? 'border-border/40 bg-muted/10 opacity-70'
-                    : 'border-border/80 bg-card hover:border-border hover:shadow-sm'
-                }`}
+                    ? 'border-border/70'
+                    : 'border-border/80 hover:border-border hover:shadow-sm'
+                )}
               >
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       {group.title}
                     </span>
                     {isGroupLocked ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        <LockIcon className="h-2.5 w-2.5" />
-                        Admin Only
+                      <span className="inline-flex items-center gap-1 rounded bg-muted/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground border border-border/60">
+                        <LockIcon className="h-2.5 w-2.5 text-muted-foreground" />
+                        Acesso Restrito
                       </span>
                     ) : (
-                      <span className="text-[10px] font-medium text-primary">
+                      <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary border border-primary/20">
                         {group.items.length} módulos
                       </span>
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    {group.items.map((item) => {
+                  <div
+                    className={cn(
+                      'gap-2.5',
+                      isFeatured
+                        ? 'grid grid-cols-1 sm:grid-cols-3'
+                        : 'flex flex-col space-y-1.5'
+                    )}
+                  >
+                    {group.items.map((item: WorkspaceNavItem) => {
                       const ItemIcon = item.icon;
+
+                      if (isGroupLocked) {
+                        return (
+                          <div
+                            key={item.id}
+                            className="flex items-start gap-2.5 p-2.5 rounded-lg text-xs bg-muted/20 border border-border/30 cursor-default select-none"
+                          >
+                            <ItemIcon className="h-4 w-4 shrink-0 text-muted-foreground/70 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-foreground/85 flex items-center justify-between">
+                                <span className="truncate">{item.title}</span>
+                                {item.badge && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-normal">
+                                    {item.badge}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5 line-clamp-2">
+                                {item.description}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+
                       return (
                         <Link
                           key={item.id}
-                          href={isGroupLocked ? '#' : item.href}
-                          className={`flex items-start gap-2.5 p-2 rounded-lg text-xs transition-colors ${
-                            isGroupLocked
-                              ? 'cursor-not-allowed opacity-50'
-                              : 'hover:bg-accent text-foreground'
-                          }`}
+                          href={item.href}
+                          className={cn(
+                            'flex items-start gap-2.5 p-2.5 rounded-lg text-xs transition-colors',
+                            isFeatured
+                              ? 'bg-muted/30 border border-border/50 hover:bg-accent/80 hover:border-border text-foreground'
+                              : 'hover:bg-accent/80 text-foreground'
+                          )}
                         >
                           <ItemIcon className="h-4 w-4 shrink-0 text-primary mt-0.5" />
                           <div className="flex-1 min-w-0">
@@ -157,7 +194,7 @@ export default function WorkspaceHubPage() {
                                 </span>
                               )}
                             </div>
-                            <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
+                            <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5 line-clamp-2">
                               {item.description}
                             </p>
                           </div>
@@ -167,17 +204,26 @@ export default function WorkspaceHubPage() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border/40 mt-4 flex items-center justify-between">
+                <div className="pt-3 border-t border-border/50 mt-4 flex items-center justify-between">
                   {isGroupLocked ? (
-                    <span className="text-[11px] text-muted-foreground">Requer credencial de administrador</span>
+                    <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                      <LockIcon className="h-3 w-3 text-muted-foreground/70" />
+                      Requer credencial de administrador
+                    </span>
                   ) : (
-                    <Link
-                      href={group.items[0]?.href || '/workspace'}
-                      className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"
-                    >
-                      <span>Abrir Visão Geral</span>
-                      <ArrowRightIcon className="h-3 w-3" />
-                    </Link>
+                    <>
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Área Liberada
+                      </span>
+                      <Link
+                        href={group.items[0]?.href || '/workspace'}
+                        className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
+                      >
+                        <span>Acessar {group.title}</span>
+                        <ArrowRightIcon className="h-3 w-3" />
+                      </Link>
+                    </>
                   )}
                 </div>
               </div>
@@ -190,4 +236,3 @@ export default function WorkspaceHubPage() {
     </div>
   );
 }
-

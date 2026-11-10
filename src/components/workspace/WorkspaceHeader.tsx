@@ -46,7 +46,7 @@ export function WorkspaceHeader() {
   const segments = pathname.split('/').filter(Boolean);
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center border-b border-border/80 bg-background/95 backdrop-blur-sm px-4 sm:px-6">
+    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center border-b border-border/80 bg-background/95 backdrop-blur-sm px-4 sm:px-6 lg:px-8">
       <div className="flex flex-1 items-center gap-3 sm:gap-4 overflow-hidden">
         <SidebarTrigger className="h-8 w-8 text-muted-foreground hover:text-foreground" />
         <Separator orientation="vertical" className="h-4 hidden sm:block" />
