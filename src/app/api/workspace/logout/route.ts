@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   let databaseRevocation: 'revoked' | 'skipped' | 'failed' = 'skipped';
 
   try {
-    const adminSessionData = await getAdminSessionUser(req);
+    const adminSessionData = await getAdminSessionUser(req, { allowConflict: true });
     if (adminSessionData) {
       const repo = new AdminRepository();
       repo.revokeSession(adminSessionData.session.id);

@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { AdminRepository, type AdminSession, type AdminUser } from '@/db/adminRepository';
+import { getSessionUser } from '@/lib/auth';
+import { CandidateRepository } from '@/db/candidateRepository';
 
 export const DEFAULT_ADMIN_AUTH_SECRET = 'buscavag-secret-key-admin-portal-2026-isolated-auth';
 export const ADMIN_SESSION_COOKIE_NAME = 'admin_session';
@@ -126,12 +128,73 @@ export function verifyAdminSessionToken(token: string): AdminSessionPayload | nu
   }
 }
 
+export interface GetAdminSessionOptions {
+  /**
+   * Permite ignorar o bloqueio de conflito de identidade.
+   * Deve ser usado EXCLUSIVAMENTE por endpoints de segurança destinados à
+   * consulta do estado de sessão, resolução de conflito ou logout.
+   * Rotas operacionais NUNCA devem ativar esta flag.
+   */
+  allowConflict?: boolean;
+}
+
+/**
+ * Erro específico lançado quando a sessão administrativa é válida, porém existe
+ * uma sessão de candidato (buscavag_session) simultaneamente válida no mesmo contexto,
+ * caracterizando conflito de identidade não resolvido.
+ */
+export class AdminSessionConflictError extends Error {
+  constructor(message = 'Conflito de sessão ativo. Resolva a identidade no Workspace antes de executar operações administrativas.') {
+    super(message);
+    this.name = 'AdminSessionConflictError';
+  }
+}
+
+export interface GetAdminSessionResult {
+  payload: AdminSessionPayload;
+  session: AdminSession;
+  user: AdminUser;
+}
+
+export type AdminAuthFailureReason = 'unauthenticated' | 'conflict';
+
+export interface AdminAuthCheckResult {
+  success: boolean;
+  data: GetAdminSessionResult | null;
+  conflict: boolean;
+  reason: AdminAuthFailureReason;
+  error?: string;
+}
+
 /**
  * Obtém o admin logado validando token JWT e status ativo em admin_sessions.
+ * Se allowConflict !== true, verifica se buscavag_session também é efetivamente válida
+ * (incluindo assinatura, expiração e status ativo em users). Se ambas forem válidas:
+ * - Se options.throwOnConflict === true (padrão false), lança AdminSessionConflictError.
+ * - Caso contrário, retorna null, rejeitando o acesso administrativo de forma segura
+ *   e centralizada para todos os endpoints operacionais que verificam if (!sessionData).
  */
 export async function getAdminSessionUser(
-  req?: NextRequest
-): Promise<{ payload: AdminSessionPayload; session: AdminSession; user: AdminUser } | null> {
+  req?: NextRequest,
+  options: GetAdminSessionOptions & { throwOnConflict?: boolean } = {}
+): Promise<GetAdminSessionResult | null> {
+  const check = await checkAdminSessionSecurity(req, options);
+  if (!check.success || !check.data) {
+    if (check.conflict && options.throwOnConflict) {
+      throw new AdminSessionConflictError();
+    }
+    return null;
+  }
+  return check.data;
+}
+
+/**
+ * Avaliação completa e detalhada da segurança da sessão administrativa.
+ */
+export async function checkAdminSessionSecurity(
+  req?: NextRequest,
+  options: GetAdminSessionOptions = {}
+): Promise<AdminAuthCheckResult> {
   let token: string | undefined;
 
   if (req) {
@@ -145,27 +208,35 @@ export async function getAdminSessionUser(
     }
   }
 
-  if (!token) return null;
+  if (!token) {
+    return { success: false, data: null, conflict: false, reason: 'unauthenticated' };
+  }
 
   const payload = verifyAdminSessionToken(token);
-  if (!payload) return null;
+  if (!payload) {
+    return { success: false, data: null, conflict: false, reason: 'unauthenticated' };
+  }
 
   const repo = new AdminRepository();
   const tokenHash = hashTokenForStorage(token);
   const session = repo.getSessionByTokenHash(tokenHash);
 
-  if (!session) return null;
+  if (!session) {
+    return { success: false, data: null, conflict: false, reason: 'unauthenticated' };
+  }
 
   // Checa se a sessão expirou no banco
   const now = new Date();
   const expiresAt = new Date(session.expires_at);
   if (expiresAt < now) {
     repo.revokeSession(session.id);
-    return null;
+    return { success: false, data: null, conflict: false, reason: 'unauthenticated' };
   }
 
   const user = repo.getAdminById(payload.adminId);
-  if (!user) return null;
+  if (!user) {
+    return { success: false, data: null, conflict: false, reason: 'unauthenticated' };
+  }
 
   // Sliding expiration: se faltar menos de 60 minutos para expirar, estende mais 2h
   const remainingMs = expiresAt.getTime() - now.getTime();
@@ -175,5 +246,36 @@ export async function getAdminSessionUser(
     session.expires_at = newExpiresAt;
   }
 
-  return { payload, session, user };
+  // 🛡️ BLOQUEIO CENTRALIZADO DE CONFLITO DE IDENTIDADE (REQ-SEG-01)
+  // A menos que explicitamente permitido por endpoints de resolução ou logout (allowConflict: true),
+  // verifica se buscavag_session também é efetivamente válida no servidor.
+  if (!options.allowConflict) {
+    try {
+      const candidateSession = await getSessionUser(req);
+      if (candidateSession && candidateSession.userId) {
+        const candidateRepo = new CandidateRepository();
+        const candidateUser = candidateRepo.getUserById(candidateSession.userId);
+
+        // Se o usuário comum existe no SQLite e está com conta ativa, CONFLITO REAL CONFIRMADO!
+        if (candidateUser && candidateUser.status === 'active') {
+          return {
+            success: false,
+            data: null,
+            conflict: true,
+            reason: 'conflict',
+            error: 'Conflito de sessão ativo. Resolva a identidade no Workspace antes de executar operações administrativas.',
+          };
+        }
+      }
+    } catch (err) {
+      // Outros erros na leitura de candidato não impedem o fluxo admin
+    }
+  }
+
+  return {
+    success: true,
+    data: { payload, session, user },
+    conflict: false,
+    reason: 'unauthenticated', // Not used on success
+  };
 }

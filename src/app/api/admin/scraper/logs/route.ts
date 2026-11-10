@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LogRepository } from '@/db/logRepository';
 import { LogLevel } from '@/types/log';
+import { checkAdminSessionSecurity } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    const sessionCheck = await checkAdminSessionSecurity(request);
+    if (!sessionCheck.success || !sessionCheck.data) {
+      if (sessionCheck.conflict) {
+        return NextResponse.json(
+          { success: false, error: sessionCheck.error, conflict: true },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json(
+        { success: false, error: 'Sessão administrativa ausente ou inválida' },
+        { status: 401 }
+      );
+    }
     const { searchParams } = new URL(request.url);
     const level = (searchParams.get('level') as LogLevel) || undefined;
     const scraperName = searchParams.get('scraperName') || undefined;
