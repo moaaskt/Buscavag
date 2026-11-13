@@ -84,7 +84,7 @@ export class CandidateRepository {
 
   createUser(user: { id: string; email: string; password_hash: string; name: string; tier?: 'free' | 'premium'; role?: 'GUEST' | 'CANDIDATE' | 'ADMIN' }): User {
     const now = new Date().toISOString();
-    const tier = user.tier || 'free';
+    const tier = user.tier || 'premium';
     const role = user.role || 'CANDIDATE';
 
     const stmt = db.prepare(`

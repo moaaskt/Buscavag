@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       email,
       name,
       password_hash,
-      tier: 'free',
+      tier: 'premium',
     });
 
     const token = createSessionToken({
