@@ -193,14 +193,10 @@ export function AppSidebar({
             {!collapsed && (
               <div className="flex flex-col">
                 <span className="font-extrabold text-sm tracking-tight text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                  Buscavag
-                  <span className="text-[10px] uppercase font-mono px-1 py-0.2 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold border border-indigo-500/20">
-                    Radar
-                  </span>
+                  Painel Buscavag
+                
                 </span>
-                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-mono">
-                  IA Job Matcher
-                </span>
+               
               </div>
             )}
           </Link>
