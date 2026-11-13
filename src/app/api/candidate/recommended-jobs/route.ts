@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
     const repo = new CandidateRepository();
     const user = repo.getUserById(session.userId);
-    const tier = user?.tier || session.tier || 'free';
+    const tier = user?.tier || session.tier || 'premium';
     const isCompleted = repo.isOnboardingComplete(session.userId);
 
     if (!user || !isCompleted) {
@@ -38,36 +38,17 @@ export async function GET(req: NextRequest) {
       offset,
     });
 
-    const isFree = tier === 'free';
-    const processedItems = result.items.map((item, index) => {
-      const isLocked = isFree && (offset + index >= 5);
-      if (isLocked) {
-        return {
-          ...item,
-          isLocked: true,
-          job: {
-            ...item.job,
-            url: '#upgrade-required',
-            description: item.job.description ? item.job.description.slice(0, 120) + '...' : '',
-          },
-          match: {
-            ...item.match,
-            matchReasoning: 'Oportunidade exclusiva com alta aderência técnica. Desbloqueie com o Plano Premium Pro.',
-          },
-        };
-      }
-      return {
-        ...item,
-        isLocked: false,
-      };
-    });
+    const processedItems = result.items.map((item) => ({
+      ...item,
+      isLocked: false,
+    }));
 
     return NextResponse.json({
       success: true,
       count: processedItems.length,
       totalCount: result.totalCount,
       tier,
-      unlockedCount: isFree ? Math.min(5, processedItems.length) : processedItems.length,
+      unlockedCount: processedItems.length,
       candidate: result.candidate,
       data: processedItems,
     });

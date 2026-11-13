@@ -127,9 +127,6 @@ export async function POST(
           nowIso,
           nowIso
         );
-
-        // Eleva o usuário a premium
-        db.prepare('UPDATE users SET tier = ?, updated_at = ? WHERE id = ?').run('premium', nowIso, targetUser.id);
       }
     }
 
