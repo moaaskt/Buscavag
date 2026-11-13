@@ -167,14 +167,7 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-zinc-200 dark:border-zinc-800/80">
         <div className="flex flex-col gap-1.5 max-w-3xl">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400 font-medium">
-              {user ? 'Painel do Candidato' : 'Plataforma Aberta de Vagas'}
-            </span>
-            <span className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></span>
-            <span className="font-mono text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
-              Mercado em Tempo Real
-            </span>
+          
           </div>
 
           {user ? (
