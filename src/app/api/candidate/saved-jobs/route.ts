@@ -40,26 +40,6 @@ export async function POST(req: NextRequest) {
     }
 
     const repo = new CandidateRepository();
-    const user = repo.getUserById(session.userId);
-    const tier = user?.tier || session.tier || 'free';
-
-    // Se estiver tentando salvar (e não remover), valida o limite
-    const currentSaved = repo.getSavedJobs(session.userId);
-    const isAlreadySaved = currentSaved.some((item) => item.job_id === parsed.data.jobId);
-
-    if (!isAlreadySaved && tier === 'free' && currentSaved.length >= 5) {
-      return NextResponse.json(
-        {
-          success: false,
-          limitReached: true,
-          maxAllowed: 5,
-          error: 'Você atingiu o limite de 5 vagas salvas do Plano Gratuito.',
-          message: 'Faça upgrade para o Plano Premium Pro para salvar vagas ilimitadas!',
-        },
-        { status: 403 }
-      );
-    }
-
     const result = repo.toggleSavedJob(session.userId, parsed.data.jobId, parsed.data.status);
 
     return NextResponse.json({
