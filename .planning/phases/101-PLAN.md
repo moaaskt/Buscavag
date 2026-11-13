@@ -13,7 +13,7 @@ Esta transformação é regida por **tolerância zero a regressões**:
 
 ## 2. Decisões Aprovadas & Correções Técnicas Incorporadas
 
-A revisão técnica incorpora integralmente as correções obrigatórias exigidas pelo Tech Lead:
+A revisão técnica incorpora integralmente as correções obrigatórias e fechamentos finais exigidos pelo Tech Lead:
 
 1. **Webhooks de Pagamento**:
    - Preservar o registro de eventos brutos em `payment_webhooks` e inserções em `payments`/`subscriptions` para histórico e auditoria.
@@ -31,7 +31,7 @@ A revisão técnica incorpora integralmente as correções obrigatórias exigida
    - Nenhum endpoint simulará contratação, cancelamento ou operações financeiras.
    - Não retornar `success: true` para operações que não aconteceram.
    - **Esclarecimento sobre HTTP 410 e Cache**: O status HTTP 410 (Gone) indica formalmente que o recurso foi permanentemente removido no servidor (conforme RFC 9110), mas **não garante a invalidação automática de caches intermediários ou de clientes**. Portanto, a descontinuação dos endpoints opera de forma totalmente independente de comportamentos de cache:
-     - O servidor responderá com cabeçalhos explícitos `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`.
+     - O servidor responderá sempre com cabeçalhos explícitos `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`.
      - Qualquer requisição que atinja o servidor será imediatamente rejeitada com payload semântico explícito, sem jamais disparar mutações financeiras ou de privilégios.
    - Comportamento individual explícito:
      - `GET /api/saas/plans`: HTTP 200, retornando `{ success: false, decommissioned: true, code: 'COMMERCIAL_DECOMMISSIONED', mode: 'personal_workspace', message: 'O catálogo comercial de planos foi descontinuado. O Buscavag opera como Personal Workspace irrestrito e gratuito.', plans: [] }`.
@@ -44,15 +44,18 @@ A revisão técnica incorpora integralmente as correções obrigatórias exigida
    - **Preservação de arquivos**: Os componentes `UpgradeModal.tsx` e `LockedJobCard.tsx` serão desacoplados das telas consumidoras e marcados como `@deprecated` com stubs seguros, sem exclusão física do disco, evitando quebras em ferramentas ou testes legados.
    - A rota e a interface `/admin/pagamentos` permanecem preservadas para auditoria administrativa histórica.
 
-5. **Backup Consistente em SQLite com WAL & Verificação por Hashes**:
+5. **Backup Rigoroso em SQLite com WAL & Verificação por Hashes**:
    - **Caminho Real do Banco**: Confirmado a partir de `src/db/index.ts` como `process.env.DATABASE_PATH || path.resolve(process.cwd(), 'buscavag.db')`.
    - **Operação em Modo WAL**: O banco opera com `PRAGMA journal_mode = WAL`.
-   - **Risco de Cópia Ingênua**: Uma simples cópia de arquivo (`fs.copyFileSync`) do arquivo `.db` principal ignoraria transações ativas gravadas no arquivo `.db-wal`, gerando um backup corrompido ou defasado.
-   - **Procedimento Seguro de Backup**:
-     - Utilizar o método nativo de backup do Better-SQLite3 (`db.backup('buscavag.db.phase101-backup')`) ou executar um checkpoint forçado `PRAGMA wal_checkpoint(TRUNCATE)` antes de gerar o arquivo de backup.
-     - Este procedimento consolida e sincroniza todas as páginas do WAL no arquivo principal antes da cópia, garantindo um snapshot 100% consistente e ACID.
+   - **Procedimento Principal de Backup**: Utilizar preferencialmente a API nativa `db.backup('buscavag.db.phase101-backup')` do Better-SQLite3, que executa o SQLite Online Backup consolidando automaticamente transações ativas e garantindo um snapshot point-in-time consistente.
+   - **Procedimento Alternativo Seguro (Checkpoint + Cópia)**:
+     - Caso seja utilizado `PRAGMA wal_checkpoint(TRUNCATE)` seguido de cópia física de arquivo:
+       1. Inspecionar o resultado do pragma: exigir estritamente `busy = 0`.
+       2. Não copiar enquanto houver operações concorrentes pendentes (`busy !== 0`).
+       3. Efetuar a cópia do arquivo sincronizado para `buscavag.db.phase101-backup`.
+       4. Confirmar a existência física do arquivo de backup no disco.
+       5. Abrir a conexão com o banco de backup isolado e executar `PRAGMA integrity_check;`, exigindo resultado `ok`.
    - **Verificação Categórica por Hashes e Chaves Primárias**:
-     - O critério `>= baseline` é insuficiente para comprovar ausência de exclusões.
      - O teste T15 capturará as chaves primárias (`id`) e gerará hashes SHA-256 de todas as linhas pré-existentes de `subscriptions`, `payments` e `payment_webhooks`, comprovando que cada registro histórico permanece presente e inalterado após a execução.
 
 ---
@@ -87,7 +90,7 @@ flowchart TD
     end
 
     subgraph U3[Unidade 3: QA Automatizado, Integridade SQLite WAL & Build]
-        C1[WAL Checkpoint + Backup nativo consistente buscavag.db.phase101-backup] --> C2[Captura de PKs e SHA-256 baseline das tabelas financeiras]
+        C1[Backup consistente via db.backup ou wal_checkpoint com busy=0 e integrity ok] --> C2[Captura de PKs e SHA-256 baseline das tabelas financeiras]
         C2 --> C3[Suíte determinística test-phase101-decommissioning.ts: 16 testes]
         C3 --> C4[Auditoria de integridade SQLite: comparação de PKs e Hashes, PRAGMA integrity_check e foreign_key_check]
         C4 --> C5[Validação TypeScript tsc e bundle npm run build]
@@ -254,15 +257,24 @@ Executar o protocolo de backup consistente de banco SQLite operando em modo WAL,
 1. **Procedimento de Backup Consistente (Antes da Unidade 1)**:
    - Caminho confirmado do banco: `path.resolve(process.cwd(), 'buscavag.db')`.
    - Como o SQLite opera em `journal_mode = WAL`, transações ativas podem residir em `buscavag.db-wal`.
-   - O backup seguro executará:
+   - **Procedimento Principal**:
      ```typescript
-     // Força a sincronização/flush de todas as páginas sujas do WAL no arquivo principal
-     db.pragma('wal_checkpoint(TRUNCATE)');
-     // Gera snapshot consistente do arquivo principal sincronizado
+     // API nativa online do Better-SQLite3: cria snapshot consistente com zero perda de transações WAL
+     await db.backup(backupPath);
+     ```
+   - **Procedimento Alternativo Seguro (Checkpoint + Cópia)**:
+     ```typescript
+     const checkpointResult = db.pragma('wal_checkpoint(TRUNCATE)') as [{ busy: number; log: number; checkpointed: number }];
+     if (checkpointResult[0]?.busy !== 0) {
+       throw new Error(`[SQLite WAL Backup Error] Checkpoint falhou com busy = ${checkpointResult[0]?.busy}. Operações pendentes em andamento.`);
+     }
      fs.copyFileSync(dbPath, backupPath);
      ```
-     ou utilizará `await db.backup(backupPath)`.
-   - Este procedimento garante que nenhum registro confirmado seja perdido na cópia.
+     - Exigência mandatória caso seja utilizado o método alternativo:
+       1. Verificar o resultado do pragma: exigir estritamente `busy === 0`.
+       2. Não copiar enquanto houver operações pendentes (`busy !== 0`).
+       3. Confirmar a existência física do arquivo de backup (`fs.existsSync(backupPath)`).
+       4. Abrir a conexão com o banco de backup isolado (`new Database(backupPath)`) e executar `PRAGMA integrity_check;`, exigindo resultado `ok`.
 
 2. **Captura de Baseline de Chaves Primárias e Hashes (Antes da Unidade 1)**:
    - Coletar todos os registros de `subscriptions`, `payments` e `payment_webhooks`.
@@ -288,7 +300,7 @@ Executar o protocolo de backup consistente de banco SQLite operando em modo WAL,
 | **T06** | Cooldown técnico de 5s preservado | Segunda análise disparada $< 5$s retorna HTTP 429 `COOLDOWN_ACTIVE`. |
 | **T07** | Sessão antiga com claim `tier = 'free'` | Token com claim `tier = 'free'` opera com acesso irrestrito em todas as rotas do candidato. |
 | **T08** | Novos cadastros com tier premium | Cadastro via `/api/auth/register` grava `tier = 'premium'` e emite sessão correspondente. |
-| **T09** | **Isolamento Estrito de RBAC com Tier Premium** | Usuário candidato com `tier = 'premium'` e `role = 'CANDIDATE'` realiza requisição autenticada a rota administrativa (`POST /api/admin/jobs/purge-non-tech` ou `GET /api/admin/usuarios`). **Exigir HTTP 403 (ou 401)** e **verificar que zero conteúdo administrativo ou dados confidenciais são retornados no corpo da resposta**. |
+| **T09** | **Isolamento Estrito de RBAC com Tier Premium (Exige HTTP 403)** | Autenticar corretamente um candidato comum legítimo com `role = 'CANDIDATE'` e `tier = 'premium'`. Fazer requisição autenticada a rota administrativa protegida (`POST /api/admin/jobs/purge-non-tech` ou `GET /api/admin/usuarios`). **Exigir estritamente HTTP 403 Forbidden**. **Não aceitar HTTP 401 como resultado aprovado** (uma falha de autenticação 401 não comprova isolamento de permissões). Verificar explicitamente que **zero dados administrativos ou confidenciais foram retornados no corpo da resposta**. |
 | **T10** | Webhook sem alteração de privilégios | Webhook de pagamento grava auditoria sem alterar `users.tier` ou `users.role`. |
 | **T11** | Endpoint `/api/saas/plans` descontinuado | Retorna HTTP 200 com `success: false`, `COMMERCIAL_DECOMMISSIONED` e cabeçalho `Cache-Control: no-store`. |
 | **T12** | Endpoints `/api/saas/upgrade` e `/cancel` | Retornam HTTP 410 Gone com `success: false`, `COMMERCIAL_DECOMMISSIONED` e `Cache-Control: no-store` (sem alterar banco). |
@@ -307,7 +319,7 @@ Executar o protocolo de backup consistente de banco SQLite operando em modo WAL,
 
 ```
 Etapa 0: Salvaguarda Inicial
-  ├── PRAGMA wal_checkpoint(TRUNCATE) + Backup consistente buscavag.db.phase101-backup
+  ├── Procedimento de backup SQLite consistente (db.backup ou wal_checkpoint com busy=0 e integrity ok)
   └── Captura do baseline determinístico (PKs e Hashes SHA-256 das tabelas financeiras)
       │
       ▼
@@ -363,7 +375,7 @@ Etapa 3: Validação & Certificação (Unidade 3)
 - [ ] **CA-11 (Módulo Histórico Preservado)**: A rota `/admin/pagamentos` permanece funcional para administradores autenticados.
 - [ ] **CA-12 (Integridade por Hashes e PKs)**: 100% das chaves primárias e hashes SHA-256 das tabelas financeiras são idênticos pré e pós-execução, e `PRAGMA integrity_check` retorna `ok`.
 - [ ] **CA-13 (Rotas Legadas Preservadas)**: Rotas `/candidate` e `/admin` permanecem operacionais sem redirecionamentos globais.
-- [ ] **CA-14 (Isolamento RBAC)**: Candidato com `tier = 'premium'` é estritamente bloqueado em rotas administrativas (HTTP 403/401 sem vazamento de dados).
+- [ ] **CA-14 (Isolamento RBAC Estrito)**: Candidato autenticado com `role = 'CANDIDATE'` e `tier = 'premium'` recebe estritamente HTTP 403 Forbidden em rota administrativa (sem aceitar 401), comprovando que zero dados administrativos são retornados.
 - [ ] **CA-15 (Suíte de Testes & Build)**: 100% de aprovação nos 16 testes de `test-phase101-decommissioning.ts` e `npm run build` aprovado.
 
 ---
