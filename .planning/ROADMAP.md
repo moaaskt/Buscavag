@@ -5,10 +5,10 @@
 ### Phase Summary
 
 | Phase | Title | Focus & Scope | Validation Gate | Status |
-| :---: | :--- | :--- | :--- | :---: |
-| **99** | Fundação do Design System, Tokens & Skill GSD | Criação da skill `buscavag-design-system`, tokens em `globals.css`, verificação do MCP/base AdminCN e port de componentes shadcn essenciais. | Componentes básicos renderizando, tokens neutros, sem quebra de CSS legado. | Ready |
-| **100** | Workspace Shell Unificado & Validação Visual | Implementação da casca única (`Sidebar` desktop/mobile Sheet, `Header`, `Breadcrumbs`, Dark/Light mode) em rota de homologação. | **Gate Visual Obrigatório**: Inspeção em Desktop/Tablet/Mobile antes de qualquer migração. | Pending |
-| **101** | Descomissionamento Comercial & Unificação de Sessão | Unificação do auth/middleware, desativação de travas Free/Pro, desativação do modal de upgrade e redirecionamento suave de rotas legadas. | Sessão única funcionando, limites neutralizados, tabelas e dados preservados. | Pending |
+| :---: | :--- | :--- | :--- | :--- | :---: |
+| **99** | Fundação do Design System, Tokens & Skill GSD | Criação da skill `buscavag-design-system`, tokens em `globals.css`, verificação do MCP/base AdminCN e port de componentes shadcn essenciais. | Componentes básicos renderizando, tokens neutros, sem quebra de CSS legado. | Complete ✓ |
+| **100** | Workspace Shell Unificado & Validação Visual | Implementação da casca única (`Sidebar` Base UI oficial `base-nova`, `Header`, `Breadcrumbs`, Dark/Light mode neutro, resolução de conflitos e segurança). | **Gate Visual & Integrado Aprovado**: Auditoria automatizada via Playwright/Node (29/29 testes de segurança, 0px overlap, SSR anti-FOUC). | Complete ✓ |
+| **101** | Descomissionamento Comercial & Unificação de Sessão | Neutralização de limites artificiais Free/Pro, desativação de paywalls/UpgradeModal, preservação integral de dados financeiros e transição de sessão. | Limites neutralizados para ilimitado, zero paywalls na UI, tabelas `subscriptions` e `payments` 100% íntegras no SQLite. | Ready (Discovery Concluído) |
 | **102** | Migração do Módulo "Minha Carreira" | Port do Feed de Vagas, Kanban e Perfil/Diagnóstico de CV para o Workspace Shell sob o novo Design System. | Não-regressão em matching IA, drag-and-drop no Kanban, upload de CV e responsividade. | Pending |
 | **103** | Migração dos Módulos "Operação & Coleta" & "Inteligência" | Port da Central de Scrapers (34 fontes), Terminal SSE, Gestão de Vagas, Empresas B2B e Logs de Auditoria. | Não-regressão em streaming de logs SSE, disparos de scrapers, filtros e responsividade. | Pending |
 | **104** | Migração dos Módulos "Comunicação" & "Gestão" | Port do Hub de Mensageria (Telegram & WhatsApp) e Gestão de Usuários (RBAC, edições, impersonate). | Não-regressão em disparos de mensagens, segurança RBAC e ferramentas de suporte. | Pending |
@@ -24,30 +24,52 @@
   1. Criação do arquivo de Skill: `.gemini/config/skills/buscavag-design-system/SKILL.md` contendo tokens, regras de UI/UX, checklist de validação visual e diretriz de consulta ao MCP shadcn ou à base `admincn-v1.0.0`.
   2. Ajuste fino de tokens em `src/app/globals.css` (paleta neutra profissional, raio de borda, tipografia, sem estética genérica de IA).
   3. Port dos componentes essenciais de `admincn-v1.0.0/src/components/ui/` para `src/components/ui/` (`sidebar`, `breadcrumb`, `sheet`, `collapsible`, `separator`, `dropdown-menu`, `skeleton`, `sonner`, `input-otp`).
-- **Critérios de Validação**:
-  - Compilação sem erros no TypeScript (`tsc --noEmit`).
-  - Coexistência pacífica com os estilos e componentes existentes sem efeitos colaterais.
+- **Status**: Concluído e homologado.
 
 ### Phase 100: Workspace Shell Unificado & Validação Visual
-- **Objetivo**: Construir a casca unificada de aplicação (`WorkspaceLayout`) baseada no AdminCN com navegação centralizada em 5 grupos e filtro RBAC.
-- **Entregas**:
-  1. `WorkspaceSidebar.tsx`: Sidebar colapsável no desktop com atalhos de teclado e badges discretos.
-  2. `WorkspaceMobileNav.tsx`: Navegação móvel via `Sheet` nativo.
-  3. `WorkspaceHeader.tsx`: Header com `SidebarTrigger`, `Breadcrumb` dinâmico, alternador de tema e perfil do usuário.
-  4. `workspaceNavConfig.ts`: Estrutura hierárquica unificada com regras de visualização por perfil (`role === 'ADMIN'`).
-- **Critérios de Validação**:
-  - **Gate Visual do Usuário**: Demonstração e aprovação do layout em tela cheia, colapsado e em viewport mobile antes de avançar para a migração dos módulos de negócio.
+- **Objetivo**: Construir a casca unificada de aplicação (`WorkspaceLayout`) baseada na arquitetura oficial Base UI (`base-nova`) com navegação centralizada em 5 grupos, RBAC discreto, segurança de sessão e Dark Mode neutro.
+- **Entregas Concluídas**:
+  1. **Segurança & Resolução de Identidade (Unidade 1)**:
+     - Detecção centralizada de conflito de sessão (`checkAdminSessionSecurity`).
+     - Rota `/api/workspace/resolve-identity` para resolução atômica de identidade.
+     - Rotação segura de sessão (`rotateSessionAtomic`) e mitigação anti-CSRF.
+     - Proteção server-side em rotas de scrapers e `/api/admin/jobs/purge-non-tech`.
+     - Suíte de segurança com 29/29 testes aprovados (`src/test-phase100-security.ts`).
+  2. **Workspace Shell & Base UI `base-nova` (Unidade 2)**:
+     - `WorkspaceSidebar.tsx`: Implementação oficial shadcn/ui Base UI (`base-nova`) com `@base-ui/react`, colapsável em desktop, tooltips flutuantes, atalhos de teclado (`Ctrl+B`) e navegação em 5 grupos.
+     - `WorkspaceHeader.tsx`: Breadcrumbs dinâmicos, SidebarTrigger, seletor de tema e menu de usuário unificado.
+     - `workspaceNavConfig.ts`: 5 grupos funcionais com filtro RBAC para itens administrativos.
+     - Tema Dark neutro oficial (`oklch(0.145 0 0)` / HSL `0 0% 9%`) com preservação do tema claro e script síncrono no `<head>` anti-FOUC.
+     - Auditoria integrada final aprovada com 100% de sucesso em Desktop, Laptop e Mobile (`scripts/phase100-final-integrated-audit.ts`).
+- **Evidências**:
+  - Relatório de Auditoria Integrada: `phase100-final-integrated-audit-report.md`.
+  - Capturas visuais homologadas em Desktop (1795×800), Laptop (1366×768) e Mobile (390×844).
+- **Limitações Documentadas**:
+  - Telas internas do Workspace (`/workspace/carreira/*`, `/workspace/operacao/*`, etc.) utilizam cards informativos de placeholder até a migração de seus respectivos módulos nas Fases 102 a 104.
+  - As rotas legadas (`/candidate`, `/admin`) permanecem ativas para manter a operabilidade diária durante a migração.
+- **Status**: Concluído e Aprovado pelo Usuário.
 
 ### Phase 101: Descomissionamento Comercial & Unificação de Sessão
-- **Objetivo**: Eliminar travas comerciais da experiência do usuário e implementar a transição de rotas legadas e middleware unificado.
-- **Entregas**:
-  1. Ajuste em `src/lib/saasLimits.ts` e repositórios para operar sem travas artificiais de quantidade (5 vagas $\rightarrow$ busca com paginação limpa).
-  2. Desativação do `UpgradeModal` e remoção de botões "Fazer Upgrade Pro" nas páginas existentes.
-  3. Preservação estrita das tabelas `subscriptions` e `payment_webhooks` no SQLite (nenhuma exclusão).
-  4. Middleware com redirecionamento transparente de `/candidate` e `/admin` para `/workspace`.
+- **Objetivo**: Transformar o Buscavag em um Personal Workspace, desmantelando a experiência comercial de SaaS (paywalls, modais de upgrade, limites artificiais de vagas e CVs) sem deletar tabelas financeiras ou quebrar APIs existentes.
+- **Discovery Concluído (Relatório `phase101-discovery-report.md`)**:
+  - 5 Buckets mapeados (Remover da UI, Desativar na UX, Preservar por Compatibilidade, Preservar Infraestrutura Interna, Decisões Humanas).
+- **Entregas Planejadas**:
+  1. **Unidade 1 — Neutralização de Limites & Backend**:
+     - Atualização de `saasLimits.ts` para cotas infinitas.
+     - Remoção do HTTP 403 por limite de 5 vagas salvas em `/api/candidate/saved-jobs`.
+     - Remoção da ofuscação de URLs (`#upgrade-required`) e truncamento de descrições em `/api/candidate/recommended-jobs`.
+     - Liberação de reanálises com IA em `/api/candidate/analyze-cv` (preservando apenas o cooldown de 5s).
+  2. **Unidade 2 — Limpeza Visual & Descomissionamento de Paywalls**:
+     - Remoção do `UpgradeModal` e cards bloqueados (`LockedJobCard`).
+     - Remoção de botões "Fazer Upgrade Pro", "Upgrade Pro para Reanalisar" e badges Free/Pro.
+     - Redirecionamento da rota `/pricing` para `/workspace`.
+  3. **Unidade 3 — Unificação de Sessão & Verificação de Não-Regressão**:
+     - Preservação estrita das tabelas `subscriptions`, `payments` e `payment_webhooks` no SQLite.
+     - Suíte de testes automatizados `src/test-phase101-decommissioning.ts`.
 - **Critérios de Validação**:
-  - Usuários acessando sem limites artificiais de vagas salvas ou análises de CV.
-  - Zero chamadas quebradas a tabelas de pagamentos.
+  - Usuários salvando e recomendando vagas ilimitadamente.
+  - Zero referências a paywall ou modais de upgrade na interface.
+  - Nenhuma migration destrutiva ou perda de dados no banco de dados.
 
 ### Phase 102: Migração do Módulo "Minha Carreira"
 - **Objetivo**: Migrar o Feed de Vagas, o Kanban e o Perfil/Diagnóstico de CV para o novo Workspace Shell.

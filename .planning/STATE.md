@@ -3,13 +3,16 @@
 ## Current Position
 - **Last Completed Milestone**: v24.0 — Sidebar Retrátil Inovadora, Telegram Notifier Estrito & LinkedIn Posts Scraper (2026-11-02)
 - **Active Milestone**: v25.0 — Personal Workspace & Redesign AdminCN (shadcn/ui)
-- **Current Status**: Governança aprovada e inicializada. Aguardando aprovação para iniciar a Fase 99.
-- **Next Step**: Executar `/gsd-plan-phase 99` para planejar a fundação do Design System e a Skill GSD.
+- **Current Status**: Phase 100 concluída e homologada pelo usuário. Discovery da Phase 101 concluído com sucesso. Aguardando alinhamento das decisões estratégicas para planejar a Phase 101.
+- **Next Step**: Alinhar decisões do Discovery da Phase 101 e executar o planejamento formal da fase (`/gsd-plan-phase 101`).
 
-## Milestone 25.0 Phases (Planned)
-- [ ] **Phase 99**: Fundação do Design System, Tokens & Skill GSD Permanente
-- [ ] **Phase 100**: Workspace Shell Unificado & Validação Visual (Gate Visual Obrigatório)
-- [ ] **Phase 101**: Descomissionamento Comercial & Unificação de Sessão
+## Milestone 25.0 Phases
+- [x] **Phase 99**: Fundação do Design System, Tokens & Skill GSD Permanente (Concluído)
+- [x] **Phase 100**: Workspace Shell Unificado & Validação Visual (Concluído e Aprovado em 2026-11-10)
+  - *Unidade 1*: Segurança, resolução atômica de identidade (`/api/workspace/resolve-identity`), proteção CSRF e rotação de sessão (29/29 testes verdes).
+  - *Unidade 2*: Sidebar oficial shadcn/ui Base UI (`base-nova`), 5 grupos hierárquicos, Dark Mode neutro (`oklch(0.145 0 0)`), script anti-FOUC e validação responsiva (1795×800, 1366×768, 390×844 com 0px de overlap).
+  - *Auditoria Integrada*: Aprovada via `scripts/phase100-final-integrated-audit.ts` (Relatório: `phase100-final-integrated-audit-report.md`).
+- [ ] **Phase 101**: Descomissionamento Comercial & Unificação de Sessão (Discovery Concluído — Relatório: `phase101-discovery-report.md`)
 - [ ] **Phase 102**: Migração do Módulo "Minha Carreira"
 - [ ] **Phase 103**: Migração dos Módulos "Operação & Coleta" & "Inteligência"
 - [ ] **Phase 104**: Migração dos Módulos "Comunicação" & "Gestão"
