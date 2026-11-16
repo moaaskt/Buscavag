@@ -6,6 +6,8 @@ import { TelegramNotifier } from './services/telegramNotifier.js';
 import { isOlderThanDays } from './utils/date.js';
 import { matchesBlacklist, matchesWhitelist, isTechJob, isBlacklistedSource } from './config/jobFilters.js';
 import { ScraperLogger } from './services/scraperLogger.js';
+import { parseCanonicalLocation } from './utils/geoParser.js';
+import { generateJobFingerprint } from './utils/fingerprint.js';
 
 dotenv.config();
 
@@ -55,6 +57,10 @@ export async function runPipeline(customLogger?: ScraperLogger, targetScraperNam
   let duplicateFilteredCount = 0;
   let discardedNonTechCount = 0;
 
+  // Rastreamento in-memory para deduplicação instantânea no ciclo atual
+  const cycleFingerprints = new Set<string>();
+  const cycleUrls = new Set<string>();
+
   for (const job of rawJobs) {
     if (isOlderThanDays(job.publishedAt, 2)) {
       continue;
@@ -91,8 +97,18 @@ export async function runPipeline(customLogger?: ScraperLogger, targetScraperNam
       continue;
     }
 
-    // Filtro 3: Deduplicação Multi-Fonte via Fingerprint & URL
-    if (repo.exists(job.url, job.company, job.title, job.platform, job.location)) {
+    // Filtro 3: Deduplicação Multi-Fonte via Fingerprint & URL (DB + Ciclo Atual em Memória)
+    const canonicalGeo = parseCanonicalLocation(job.location, job.platform, job.title, job.description);
+    const canonicalLoc = canonicalGeo.canonicalLocation || job.location || null;
+    const fpCanonical = generateJobFingerprint(job.title, job.company, canonicalLoc);
+    const fpRaw = generateJobFingerprint(job.title, job.company, job.location);
+
+    if (
+      cycleUrls.has(job.url) ||
+      cycleFingerprints.has(fpCanonical) ||
+      cycleFingerprints.has(fpRaw) ||
+      repo.exists(job.url, job.company, job.title, job.platform, job.location, job.description)
+    ) {
       duplicateFilteredCount++;
       const msg = `[DEDUPLICAÇÃO FINGERPRINT] Vaga já cadastrada via outra fonte ou URL: "${job.title}" (${job.company})`;
       console.log(`   ${msg}`);
@@ -102,6 +118,11 @@ export async function runPipeline(customLogger?: ScraperLogger, targetScraperNam
       });
       continue;
     }
+
+    // Registra URL e Fingerprint no ciclo atual para barrar duplicatas subsequentes do mesmo lote
+    cycleUrls.add(job.url);
+    cycleFingerprints.add(fpCanonical);
+    if (fpRaw) cycleFingerprints.add(fpRaw);
 
     newJobsCount++;
 

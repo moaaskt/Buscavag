@@ -43,12 +43,24 @@ export class JobRepository {
     company: string,
     title: string,
     platform?: string,
-    location?: string | null
+    location?: string | null,
+    description?: string | null
   ): boolean {
     const id = generateJobHash(url, company, title, platform);
-    const fingerprint = generateJobFingerprint(title, company, location);
-    const stmt = db.prepare('SELECT 1 FROM jobs WHERE id = ? OR url = ? OR fingerprint = ?');
-    const result = stmt.get(id, url, fingerprint);
+
+    // Resolve localização canônica igual ao insert() para o fingerprint bater com 100% de precisão
+    const canonicalGeo = parseCanonicalLocation(
+      location,
+      platform,
+      title,
+      description || ''
+    );
+    const canonicalLoc = canonicalGeo.canonicalLocation || location || null;
+    const fingerprintCanonical = generateJobFingerprint(title, company, canonicalLoc);
+    const fingerprintRaw = generateJobFingerprint(title, company, location);
+
+    const stmt = db.prepare('SELECT 1 FROM jobs WHERE id = ? OR url = ? OR fingerprint = ? OR fingerprint = ?');
+    const result = stmt.get(id, url, fingerprintCanonical, fingerprintRaw);
     return !!result;
   }
 
@@ -117,6 +129,16 @@ export class JobRepository {
     const location = canonicalGeo.canonicalLocation || rawJob.location || null;
     const fingerprint = generateJobFingerprint(rawJob.title, rawJob.company, location);
 
+    // 🔒 BARREIRA DE DEDUPLICAÇÃO ESTRITA:
+    // Se outra vaga com ID diferente já tiver o mesmo fingerprint no banco, retorna a existente
+    const duplicateFp = db.prepare(
+      "SELECT id FROM jobs WHERE fingerprint = ? AND fingerprint IS NOT NULL AND fingerprint != '' AND id != ? LIMIT 1"
+    ).get(fingerprint, id) as any;
+    if (duplicateFp) {
+      const existingJob = this.getJobById(duplicateFp.id);
+      if (existingJob) return existingJob;
+    }
+
     const stmt = db.prepare(`
       INSERT INTO jobs (
         id, url, title, company, platform, description, published_at, location,
@@ -126,7 +148,16 @@ export class JobRepository {
         required_seniority, tech_stack, work_model, is_tech_software, fingerprint,
         city, state
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO NOTHING
+      ON CONFLICT(id) DO UPDATE SET
+        application_status = excluded.application_status,
+        score_ia = excluded.score_ia,
+        overall_score = excluded.overall_score,
+        stack_score = excluded.stack_score,
+        seniority_score = excluded.seniority_score,
+        location_score = excluded.location_score,
+        required_seniority = COALESCE(excluded.required_seniority, jobs.required_seniority),
+        tech_stack = excluded.tech_stack,
+        fingerprint = excluded.fingerprint
     `);
 
     stmt.run(

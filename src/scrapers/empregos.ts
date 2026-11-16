@@ -45,12 +45,15 @@ export class EmpregosScraper implements JobScraper {
           }
           if (!company) company = 'Empregos Partner';
 
-          // Localização
-          const cardText = $(el).text().replace(/\s+/g, ' ');
+          // Localização limpa (removendo botões e badges como 'Copiar link')
+          const clone = $(el).clone();
+          clone.find('button, script, style, .btn, [class*="copy"], [class*="share"]').remove();
+          const cardText = clone.text().replace(/\s+/g, ' ');
           let location = 'Brasil';
           const locMatch = cardText.match(/([A-Za-zÀ-ÖØ-öø-ÿ\s]{3,30}),\s*([A-Z]{2})/);
           if (locMatch) {
-            location = `${locMatch[1].trim()}, ${locMatch[2]}`;
+            let cleanCity = locMatch[1].replace(/^(?:copiar\s*link|compartilhar|ver\s*vaga)\s*/i, '').trim();
+            location = `${cleanCity}, ${locMatch[2]}`;
           }
 
           seenUrls.add(fullUrl);
