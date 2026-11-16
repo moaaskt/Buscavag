@@ -28,3 +28,4 @@
 |---|---|---|---|
 | `fix-theme-persistence` | Persistência do tema claro/escuro via localStorage e script anti-flash no layout | 2026-09-04 | complete ✓ |
 | `strict-programming-only-filters` | Blindagem e refinamento dos filtros para aceitar estritamente vagas de programação e engenharia de software | 2026-11-16 | complete ✓ |
+| `fix-chrome-linkedin-launcher` | Correção do inicializador do Chrome dedicado para o LinkedIn (resolução de queda precoce, loop de redirecionamento e sincronização automática de cookies) | 2026-11-16 | complete ✓ |

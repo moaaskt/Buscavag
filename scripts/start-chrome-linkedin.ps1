@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # BUSCAVAG - INICIALIZADOR DO CHROME COM SESSÃO PERSISTENTE E PORTA CDP (9222)
 # ==============================================================================
 
@@ -29,33 +29,53 @@ if (-not $chromeExe) {
     exit 1
 }
 
-# 2. Definir diretório do perfil dedicado
+# 2. Definir e preparar o diretório do perfil dedicado
 $profileDir = "C:\buscavag-chrome-profile"
 try {
     if (-not (Test-Path $profileDir)) {
         New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
     }
 } catch {
-    # Fallback se C:\ exigir elevação de privilégios de administrador
-    $profileDir = "$env:USERPROFILE\buscavag-chrome-profile"
+    # Fallback caso C:\ exija elevação de privilégios
+    $profileDir = "$env:LOCALAPPDATA\buscavag-chrome-profile"
     if (-not (Test-Path $profileDir)) {
         New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
     }
 }
 
+# 3. Limpar travas órfãs e dumps de falha que impedem o Chrome de iniciar
+$staleLocks = @(
+    "$profileDir\Singleton*",
+    "$profileDir\lockfile",
+    "$profileDir\Crashpad\reports\*"
+)
+foreach ($pattern in $staleLocks) {
+    Remove-Item -Path $pattern -Force -Recurse -ErrorAction SilentlyContinue
+}
+
+# 4. Verificar se a porta 9222 já está em uso e liberar se necessário
+$existingPort = Get-NetTCPConnection -LocalPort 9222 -ErrorAction SilentlyContinue
+if ($existingPort) {
+    Write-Host "⚠️ Porta 9222 já estava ocupada por processo anterior (PID: $($existingPort.OwningProcess)). Finalizando..." -ForegroundColor Yellow
+    Stop-Process -Id $existingPort.OwningProcess -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
+
 Write-Host "👉 Executável Chrome: $chromeExe" -ForegroundColor Gray
 Write-Host "👉 Perfil Dedicado:   $profileDir" -ForegroundColor Gray
 Write-Host "👉 Porta de Debug:    9222" -ForegroundColor Gray
+Write-Host "👉 URL Inicial:       https://www.linkedin.com/login" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Iniciando Google Chrome..." -ForegroundColor Green
 
-# 3. Argumentos para depuração remota via CDP
+# 5. Argumentos sanitizados para depuração remota via CDP
 $arguments = @(
     "--remote-debugging-port=9222",
-    "--user-data-dir=`"$profileDir`"",
+    "--user-data-dir=$profileDir",
+    "--remote-allow-origins=*",
     "--no-first-run",
     "--no-default-browser-check",
-    "https://www.linkedin.com/feed/"
+    "https://www.linkedin.com/login"
 )
 
 Start-Process -FilePath $chromeExe -ArgumentList $arguments
@@ -64,11 +84,10 @@ Write-Host ""
 Write-Host "======================================================" -ForegroundColor Yellow
 Write-Host "  INSTRUÇÕES DE AUTENTICAÇÃO" -ForegroundColor Yellow
 Write-Host "======================================================" -ForegroundColor Yellow
-Write-Host "1. A janela do Google Chrome foi aberta."
-Write-Host "2. Faça login na sua conta do LinkedIn normalmente (com 2FA/senha)."
-Write-Host "3. Mantenha essa janela aberta em segundo plano (ou minimizada)."
-Write-Host "4. O Buscavag se conectará a ela pela porta 9222 sem acionar checkpoints anti-bot!"
+Write-Host "1. A janela do Google Chrome foi aberta na página oficial de login." -ForegroundColor White
+Write-Host "2. Digite seu e-mail e senha do LinkedIn e faça o login normalmente." -ForegroundColor White
+Write-Host "3. Após logar e visualizar a tela inicial (Feed), execute em outro terminal:" -ForegroundColor Cyan
+Write-Host "   npm run auth:linkedin" -ForegroundColor Green
+Write-Host "   (Esse comando vai sincronizar os cookies para o .env e testar o scraper!)" -ForegroundColor Gray
+Write-Host "4. Mantenha essa janela do Chrome aberta em segundo plano." -ForegroundColor White
 Write-Host ""
-Write-Host "🚀 Pronto! O scraper do LinkedIn agora pode rodar a qualquer momento." -ForegroundColor Green
-Write-Host ""
-
