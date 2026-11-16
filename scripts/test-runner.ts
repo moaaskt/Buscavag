@@ -1,5 +1,6 @@
 import { spawnSync } from 'child_process';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 interface TestSuite {
   id: string;
@@ -97,6 +98,7 @@ export function runAllSuites(suites: TestSuite[] = TEST_SUITES): { results: Test
     const startTime = Date.now();
     const child = spawnSync('npx', ['tsx', suite.file], {
       cwd: process.cwd(),
+      shell: true,
       encoding: 'utf-8',
       env: { ...process.env, NODE_ENV: 'test' },
     });
@@ -157,7 +159,7 @@ export function runAllSuites(suites: TestSuite[] = TEST_SUITES): { results: Test
 }
 
 // Execução direta do runner via CLI
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { allPassed } = runAllSuites();
   process.exit(allPassed ? 0 : 1);
 }
