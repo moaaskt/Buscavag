@@ -535,8 +535,26 @@ export class LinkedInPostsScraper implements JobScraper {
           });
           console.log(`[LinkedInPostsScraper] 🖥️ Inicializado contexto persistente em "${profileDir}".`);
         } catch (launchErr: any) {
-          console.warn('[LinkedInPostsScraper] ℹ️ Chrome de automação não detectado na porta 9222 e fallback indisponível:', launchErr.message);
-          return [];
+          console.warn('[LinkedInPostsScraper] ℹ️ Perfil persistente bloqueado, iniciando contexto isolado limpo:', launchErr.message);
+          try {
+            browser = await chromium.launch({
+              headless: false,
+              channel: 'chrome',
+              args: [
+                '--no-sandbox',
+                '--disable-blink-features=AutomationControlled',
+                '--no-first-run',
+                '--no-default-browser-check',
+              ],
+            });
+            context = await browser.newContext({
+              userAgent: FIXED_USER_AGENT,
+              viewport: { width: 1280, height: 800 },
+            });
+          } catch (cleanErr: any) {
+            console.error('[LinkedInPostsScraper] ❌ Falha crítica ao inicializar navegador:', cleanErr.message);
+            return [];
+          }
         }
       }
 
@@ -650,16 +668,20 @@ export class LinkedInPostsScraper implements JobScraper {
         } catch {}
       });
 
-      // 8. Navegação Humana: entrar por /feed/ primeiro
+      // 8. Navegação Humana: tentar entrar por /feed/ primeiro
       console.log('[LinkedInPostsScraper] Acessando https://www.linkedin.com/feed/ ...');
-      await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 35000 });
-      await this.humanPause(1200, 2200);
+      try {
+        await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 35000 });
+        await this.humanPause(1200, 2200);
 
-      const currentUrl = page.url();
-      if (currentUrl.includes('/checkpoint') || currentUrl.includes('/authwall') || currentUrl.includes('/login')) {
-        console.warn('[LinkedInPostsScraper] ⚠️ LinkedIn exigiu login/checkpoint. Ativando cooldown de 6 horas.');
-        this.setCooldown(6, 'Checkpoint ou tela de login detectada em /feed/');
-        return [];
+        const currentUrl = page.url();
+        if (currentUrl.includes('/checkpoint') || currentUrl.includes('/authwall') || currentUrl.includes('/login')) {
+          console.warn('[LinkedInPostsScraper] ⚠️ LinkedIn exigiu login/checkpoint. Ativando cooldown de 6 horas.');
+          this.setCooldown(6, 'Checkpoint ou tela de login detectada em /feed/');
+          return [];
+        }
+      } catch (feedErr: any) {
+        console.warn('[LinkedInPostsScraper] ℹ️ Aviso ao carregar feed principal (tentando seguir diretamente para fontes):', feedErr?.message);
       }
 
       // 9. Navegação sequencial com salvamento parcial e controle de deadline

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import urllib.parse
@@ -21,6 +22,21 @@ HEADERS = {
     "Referer": "https://www.google.com/",
 }
 
+def _fetch_glassdoor_html(url: str, alt_url: str) -> Optional[str]:
+    if not curl_requests:
+        return None
+    try:
+        session = curl_requests.Session(impersonate="chrome124")
+        session.headers.update(HEADERS)
+        resp = session.get(url, timeout=15)
+        if resp.status_code != 200:
+            resp = session.get(alt_url, timeout=15)
+        if resp.status_code == 200:
+            return resp.text
+    except Exception as e:
+        logger.warning(f"[Glassdoor] Falha na requisição curl_cffi: {e}")
+    return None
+
 async def scrape_glassdoor(
     query: Optional[str] = "desenvolvedor",
     location: Optional[str] = None,
@@ -34,62 +50,53 @@ async def scrape_glassdoor(
     clean_query = re.sub(r'[^a-zA-Z0-9]+', '-', raw_query)
     
     url = f"https://www.glassdoor.com.br/Vaga/brasil-{clean_query}-vagas-SRCH_IL.0,6_IN36_KO7,{7 + len(clean_query)}.htm"
+    alt_url = "https://www.glassdoor.com.br/Vaga/brasil-desenvolvedor-vagas-SRCH_IL.0,6_IN36_KO7,20.htm"
     jobs: List[JobResponseItem] = []
     seen_urls = set()
 
-    # Tentativa via curl_cffi stealth session com impersonate chrome124
-    if curl_requests:
-        try:
-            session = curl_requests.Session(impersonate="chrome124")
-            session.headers.update(HEADERS)
-            resp = session.get(url, timeout=15)
+    try:
+        html_text = await asyncio.to_thread(_fetch_glassdoor_html, url, alt_url)
+        if html_text:
+            soup = BeautifulSoup(html_text, "html.parser")
+            cards = soup.select('li[data-test="jobListing"], [class*="JobCard"]')
+            
+            for card in cards:
+                if len(jobs) >= limit:
+                    break
 
-            # Fallback se url especifica não abrir
-            if resp.status_code != 200:
-                alt_url = "https://www.glassdoor.com.br/Vaga/brasil-desenvolvedor-vagas-SRCH_IL.0,6_IN36_KO7,20.htm"
-                resp = session.get(alt_url, timeout=15)
+                title_el = card.select_one('[data-test="job-title"], a[data-test="job-link"], h2, h3')
+                company_el = card.select_one('[data-test="employer-name"], [class*="EmployerProfile"], [class*="employerName"]')
+                loc_el = card.select_one('[data-test="emp-location"], [class*="location"]')
+                link_el = card.select_one('a[data-test="job-link"], a[href*="/job-listing/"], a[href*="/partner/jobListing"]')
 
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, "html.parser")
-                cards = soup.select('li[data-test="jobListing"], [class*="JobCard"]')
-                
-                for card in cards:
-                    if len(jobs) >= limit:
-                        break
+                title = title_el.get_text(strip=True) if title_el else ""
+                company = company_el.get_text(strip=True) if company_el else "Glassdoor Employer"
+                loc = loc_el.get_text(strip=True) if loc_el else (location or "Brasil")
+                href = link_el.get("href", "") if link_el else ""
 
-                    title_el = card.select_one('[data-test="job-title"], a[data-test="job-link"], h2, h3')
-                    company_el = card.select_one('[data-test="employer-name"], [class*="EmployerProfile"], [class*="employerName"]')
-                    loc_el = card.select_one('[data-test="emp-location"], [class*="location"]')
-                    link_el = card.select_one('a[data-test="job-link"], a[href*="/job-listing/"], a[href*="/partner/jobListing"]')
+                if not title or not href:
+                    continue
 
-                    title = title_el.get_text(strip=True) if title_el else ""
-                    company = company_el.get_text(strip=True) if company_el else "Glassdoor Employer"
-                    loc = loc_el.get_text(strip=True) if loc_el else (location or "Brasil")
-                    href = link_el.get("href", "") if link_el else ""
+                full_url = href if href.startswith("http") else f"https://www.glassdoor.com.br{href}"
+                if full_url in seen_urls:
+                    continue
+                seen_urls.add(full_url)
 
-                    if not title or not href:
-                        continue
-
-                    full_url = href if href.startswith("http") else f"https://www.glassdoor.com.br{href}"
-                    if full_url in seen_urls:
-                        continue
-                    seen_urls.add(full_url)
-
-                    jobs.append(
-                        JobResponseItem(
-                            id=f"glassdoor-{len(jobs)+1}",
-                            title=title,
-                            company=company,
-                            location=loc,
-                            url=full_url,
-                            source="glassdoor",
-                            description=f"{title} na empresa {company} ({loc}) via Glassdoor",
-                            publishedAt=datetime.now(timezone.utc).isoformat(),
-                            workModel="Remoto" if "remoto" in (title + loc).lower() else "Presencial"
-                        )
+                jobs.append(
+                    JobResponseItem(
+                        id=f"glassdoor-{len(jobs)+1}",
+                        title=title,
+                        company=company,
+                        location=loc,
+                        url=full_url,
+                        source="glassdoor",
+                        description=f"{title} na empresa {company} ({loc}) via Glassdoor",
+                        publishedAt=datetime.now(timezone.utc).isoformat(),
+                        workModel="Remoto" if "remoto" in (title + loc).lower() else "Presencial"
                     )
-        except Exception as e:
-            logger.debug(f"[Glassdoor] Sessão direta encontrou desafio: {e}")
+                )
+    except Exception as e:
+        logger.debug(f"[Glassdoor] Sessão direta encontrou desafio: {e}")
 
     logger.info(f"[Glassdoor] Finalizado com {len(jobs)} vagas capturadas.")
     return jobs
