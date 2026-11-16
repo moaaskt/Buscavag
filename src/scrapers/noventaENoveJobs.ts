@@ -1,112 +1,118 @@
 import * as cheerio from 'cheerio';
 import { fetchHtml, createStealthContext, JobScraper } from './base.js';
 import { PlatformSource, RawJob } from '../types/job.js';
-import { parseRelativeDate, isOlderThanDays } from '../utils/date.js';
+import { cleanJobTitle } from '../config/jobFilters.js';
 
 export class NoventaENoveJobsScraper implements JobScraper {
   name = '99jobs';
 
   async scrape(): Promise<RawJob[]> {
-    // 99jobs depende de renderização dinâmica no cliente via JavaScript.
-    // Inicialização direta via Playwright Stealth sem roundtrip estático prévio.
+    try {
+      const jobs = await this.scrapeViaHttp();
+      if (jobs.length > 0) return jobs;
+    } catch (e) {
+      console.warn('[99jobsScraper] HTTP falhou, tentando Playwright:', (e as Error).message);
+    }
     return await this.scrapeViaPlaywright();
   }
 
   private async scrapeViaHttp(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
-    const searchSlugs = ['desenvolvedor', 'programador', 'junior', 'full-stack', 'tecnologia'];
+    const seenUrls = new Set<string>();
+    const searchUrls = [
+      'https://www.99jobs.com/',
+      'https://www.99jobs.com/opportunities/filtered_search?utf8=%E2%9C%93&q=desenvolvedor',
+      'https://www.99jobs.com/opportunities/filtered_search?utf8=%E2%9C%93&q=tecnologia',
+      'https://99jobs.com/collections/seu-proximo-estagio-ta-on',
+    ];
 
-    for (const slug of searchSlugs) {
+    for (const url of searchUrls) {
       try {
-        const url = `https://www.99jobs.com/opportunities?utf8=%E2%9C%93&q=${encodeURIComponent(slug)}`;
         const html = await fetchHtml(url);
         const $ = cheerio.load(html);
 
-        $('.opportunity-card, .job-item, article, [data-opportunity-id], .card-opportunity').each((_, el) => {
-          const titleEl = $(el).find('h2 a, h3 a, .title a, a[href*="/opportunities/"]');
-          const companyEl = $(el).find('.company-name, .company, .organization');
-          const locationEl = $(el).find('.location, .city, .address');
-          const dateEl = $(el).find('time, .date, .published');
+        $('a[href*="/jobs/"]').each((_, a) => {
+          const href = $(a).attr('href') || '';
+          if (!href || href.includes('tagportal&utm_medium=ses_clientes')) return;
 
-          const title = titleEl.text().trim();
-          let href = titleEl.attr('href') || $(el).find('a').attr('href') || '';
-          if (!title || !href) return;
+          const cleanUrl = href.split('?')[0];
+          const fullUrl = cleanUrl.startsWith('http') ? cleanUrl : `https://99jobs.com${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
+          if (seenUrls.has(fullUrl)) return;
 
-          const company = companyEl.text().trim() || 'Empresa 99jobs';
-          const location = locationEl.text().trim() || 'Brasil';
-          const dateStr = dateEl.text().trim();
+          const rawText = $(a).text().replace(/\s+/g, ' ').trim();
+          if (rawText.length < 5) return;
 
-          const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 7)) return;
+          const titleMatch = rawText.match(/^([A-Za-zÀ-ÖØ-öø-ÿ0-9\s()/-]{4,50})/);
+          const title = cleanJobTitle(titleMatch ? titleMatch[1].trim() : rawText.slice(0, 40));
 
-          const fullUrl = href.startsWith('http') ? href : `https://www.99jobs.com${href.startsWith('/') ? '' : '/'}${href}`;
+          const matchEmpresa = fullUrl.match(/99jobs\.com\/([a-zA-Z0-9_-]+)\/jobs\//);
+          const company = matchEmpresa ? matchEmpresa[1].replace(/-/g, ' ') : '99jobs';
 
+          let location = 'Brasil';
+          if (rawText.toLowerCase().includes('remoto')) {
+            location = 'Remoto';
+          }
+
+          seenUrls.add(fullUrl);
           jobs.push({
             title,
             company,
             platform: PlatformSource.NOVENTA_NOVE_JOBS,
             url: fullUrl,
             description: `${title} - ${company} (${location})`,
-            publishedAt,
+            publishedAt: new Date(),
             location,
           });
         });
       } catch (err) {
-        console.warn(`[99jobsScraper] Aviso para "${slug}":`, (err as Error).message);
+        console.warn(`[99jobsScraper] Aviso para "${url}":`, (err as Error).message);
       }
     }
 
-    if (jobs.length > 0) return jobs;
-    throw new Error('Nenhuma vaga capturada via HTTP na 99jobs');
+    return jobs;
   }
 
   private async scrapeViaPlaywright(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
-    const searchUrl = 'https://www.99jobs.com/opportunities?q=desenvolvedor';
+    const searchUrl = 'https://www.99jobs.com/';
     const { browser, context, page } = await createStealthContext();
 
     try {
       await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(2000);
 
-      const cards = await page.$$('.opportunity-card, .job-item, article, [data-opportunity-id]');
+      const items = await page.evaluate(() => {
+        const links = Array.from(document.querySelectorAll('a[href*="/jobs/"]'));
+        return links.map((a) => ({
+          href: (a as HTMLAnchorElement).href,
+          text: (a as HTMLElement).innerText.trim().replace(/\s+/g, ' '),
+        })).filter((x) => x.text.length > 5 && !x.href.includes('ses_clientes'));
+      });
 
-      for (const card of cards) {
-        try {
-          const titleEl = await card.$('h2 a, h3 a, .title a, a[href*="/opportunities/"]');
-          const companyEl = await card.$('.company-name, .company, .organization');
-          const locationEl = await card.$('.location, .city');
-          const dateEl = await card.$('time, .date');
+      const seenUrls = new Set<string>();
+      for (const item of items) {
+        const cleanUrl = item.href.split('?')[0];
+        if (seenUrls.has(cleanUrl)) continue;
+        seenUrls.add(cleanUrl);
 
-          const title = titleEl ? (await titleEl.innerText()).trim() : '';
-          const href = titleEl ? await titleEl.getAttribute('href') : '';
-          const company = companyEl ? (await companyEl.innerText()).trim() : 'Empresa 99jobs';
-          const location = locationEl ? (await locationEl.innerText()).trim() : 'Brasil';
-          const dateStr = dateEl ? (await dateEl.innerText()).trim() : '';
+        const matchEmpresa = cleanUrl.match(/99jobs\.com\/([a-zA-Z0-9_-]+)\/jobs\//);
+        const company = matchEmpresa ? matchEmpresa[1].replace(/-/g, ' ') : '99jobs';
+        const title = cleanJobTitle(item.text.slice(0, 50));
 
-          if (!title || !href) continue;
-
-          const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 7)) continue;
-
-          const fullUrl = href.startsWith('http') ? href : `https://www.99jobs.com${href.startsWith('/') ? '' : '/'}${href}`;
-
-          jobs.push({
-            title,
-            company,
-            platform: PlatformSource.NOVENTA_NOVE_JOBS,
-            url: fullUrl,
-            description: `${title} - ${company} (${location})`,
-            publishedAt,
-            location,
-          });
-        } catch {}
+        jobs.push({
+          title,
+          company,
+          platform: PlatformSource.NOVENTA_NOVE_JOBS,
+          url: cleanUrl,
+          description: `${title} - ${company}`,
+          publishedAt: new Date(),
+          location: 'Brasil',
+        });
       }
     } catch (err) {
-      console.warn('[99jobsScraper] Playwright erro:', (err as Error).message);
+      console.warn('[99jobsScraper] Erro Playwright:', (err as Error).message);
     } finally {
-      await context.close();
-      await browser.close();
+      await browser.close().catch(() => {});
     }
 
     return jobs;

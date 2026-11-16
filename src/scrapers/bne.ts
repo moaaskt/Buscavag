@@ -1,13 +1,14 @@
 import * as cheerio from 'cheerio';
 import { fetchHtml, JobScraper } from './base.js';
 import { PlatformSource, RawJob } from '../types/job.js';
-import { parseRelativeDate, isOlderThanDays } from '../utils/date.js';
+import { cleanJobTitle } from '../config/jobFilters.js';
 
 export class BneScraper implements JobScraper {
   name = 'BNE';
 
   async scrape(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
+    const seenUrls = new Set<string>();
     const searchSlugs = ['desenvolvedor', 'programador', 'full-stack', 'ti'];
 
     for (const slug of searchSlugs) {
@@ -16,32 +17,42 @@ export class BneScraper implements JobScraper {
         const html = await fetchHtml(url);
         const $ = cheerio.load(html);
 
-        $('.job-item, .vaga, article, [class*="job-card"], .job').each((_, el) => {
-          const titleEl = $(el).find('h2 a, h3 a, .title a, a[href*="/vaga-de-emprego/"]');
-          const companyEl = $(el).find('.company, .empresa, [class*="company"]');
-          const locationEl = $(el).find('.location, .cidade, [class*="location"]');
-          const dateEl = $(el).find('.date, time, [class*="date"]');
-
-          const title = titleEl.text().trim();
-          let href = titleEl.attr('href') || $(el).find('a').attr('href') || '';
-          if (!title || !href) return;
-
-          const company = companyEl.text().trim() || 'BNE Empregos';
-          const location = locationEl.text().trim() || 'Brasil';
-          const dateStr = dateEl.text().trim();
-
-          const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 5)) return;
+        $('.job__card__container, .card--list--vagas, [class*="card--list"]').each((_, el) => {
+          const linkEl = $(el).find('a.card__link, h2 a, h3 a, a[href*="/vaga-de-emprego"]').first();
+          const href = linkEl.attr('href') || '';
+          if (!href) return;
 
           const fullUrl = href.startsWith('http') ? href : `https://www.bne.com.br${href.startsWith('/') ? '' : '/'}${href}`;
+          if (seenUrls.has(fullUrl)) return;
 
+          let rawTitle = linkEl.attr('title') || linkEl.text().trim();
+          if (!rawTitle) return;
+
+          // Se o title for "Desenvolvedor em Consolação/MG", extrair título limpo
+          let title = cleanJobTitle(rawTitle);
+          if (title.toLowerCase().startsWith('vaga de ')) {
+            title = title.substring(8).trim();
+          }
+
+          const cardText = $(el).text().replace(/\s+/g, ' ');
+
+          let location = 'Brasil';
+          const locMatch = cardText.match(/([A-Za-zÀ-ÖØ-öø-ÿ\s]+)\s*\/\s*([A-Z]{2})/);
+          if (locMatch) {
+            location = `${locMatch[1].trim()} / ${locMatch[2]}`;
+          }
+
+          const companyEl = $(el).find('.job__card__company, .empresa, [class*="company"]').first();
+          const company = companyEl.text().trim() || 'BNE Empregos';
+
+          seenUrls.add(fullUrl);
           jobs.push({
             title,
             company,
             platform: PlatformSource.BNE,
             url: fullUrl,
             description: `${title} - ${company} (${location})`,
-            publishedAt,
+            publishedAt: new Date(),
             location,
           });
         });

@@ -11,6 +11,7 @@ export { ProgramathorScraper } from './programathor.js';
 export { RemotarScraper } from './remotar.js';
 export { CathoScraper } from './catho.js';
 export { GlassdoorScraper } from './glassdoor.js';
+export { BebeeScraper } from './bebee.js';
 // Regionais SC
 export { SaoJoseScraper } from './saoJose.js';
 export { VagasScScraper } from './vagasSc.js';
@@ -53,6 +54,7 @@ import { ProgramathorScraper } from './programathor.js';
 import { RemotarScraper } from './remotar.js';
 import { CathoScraper } from './catho.js';
 import { GlassdoorScraper } from './glassdoor.js';
+import { BebeeScraper } from './bebee.js';
 import { SaoJoseScraper } from './saoJose.js';
 import { VagasScScraper } from './vagasSc.js';
 import { VagasFloripaScraper } from './vagasFloripa.js';
@@ -124,6 +126,7 @@ export class ScraperOrchestrator {
       new RemotarScraper(),
       new CathoScraper(),
       new GlassdoorScraper(),
+      new BebeeScraper(),
       // Regionais SC
       new SaoJoseScraper(),
       new VagasScScraper(),

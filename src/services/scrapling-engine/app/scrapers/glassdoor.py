@@ -15,9 +15,10 @@ from app.schemas import JobResponseItem
 logger = logging.getLogger("scrapling-engine.glassdoor")
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8",
+    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Referer": "https://www.google.com/",
 }
 
 async def scrape_glassdoor(
@@ -29,32 +30,37 @@ async def scrape_glassdoor(
     """
     Scraper resiliente para a plataforma Glassdoor com evasão stealth e tratamento tolerante de WAF.
     """
-    raw_query = (query or "desenvolvedor").strip()
-    encoded_query = urllib.parse.quote_plus(f"{raw_query} junior brasil")
+    raw_query = (query or "desenvolvedor").strip().lower()
+    clean_query = re.sub(r'[^a-zA-Z0-9]+', '-', raw_query)
     
-    url = f"https://www.glassdoor.com.br/Vaga/brasil-{re.sub(r'[^a-zA-Z0-9]+', '-', raw_query.lower())}-vagas-SRCH_IL.0,6_IN36.htm"
+    url = f"https://www.glassdoor.com.br/Vaga/brasil-{clean_query}-vagas-SRCH_IL.0,6_IN36_KO7,{7 + len(clean_query)}.htm"
     jobs: List[JobResponseItem] = []
     seen_urls = set()
 
-    # Estratégia 1: Tentativa via curl_cffi stealth session
+    # Tentativa via curl_cffi stealth session com impersonate chrome124
     if curl_requests:
         try:
-            session = curl_requests.Session(impersonate="chrome120")
+            session = curl_requests.Session(impersonate="chrome124")
             session.headers.update(HEADERS)
             resp = session.get(url, timeout=15)
 
+            # Fallback se url especifica não abrir
+            if resp.status_code != 200:
+                alt_url = "https://www.glassdoor.com.br/Vaga/brasil-desenvolvedor-vagas-SRCH_IL.0,6_IN36_KO7,20.htm"
+                resp = session.get(alt_url, timeout=15)
+
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, "html.parser")
-                cards = soup.select('li[data-test="jobListing"], .JobsList_jobListItem__wjTHv, article, a[data-test="job-link"]')
+                cards = soup.select('li[data-test="jobListing"], [class*="JobCard"]')
                 
                 for card in cards:
                     if len(jobs) >= limit:
                         break
 
-                    title_el = card.select_one('[data-test="job-title"], .JobCard_jobTitle___721x, h2, h3')
-                    company_el = card.select_one('[data-test="employer-name"], .EmployerProfile_employerName__8Aafq')
-                    loc_el = card.select_one('[data-test="emp-location"], .JobCard_location__rCzjx')
-                    link_el = card.select_one('a[href*="/job-listing/"], a[data-test="job-link"]')
+                    title_el = card.select_one('[data-test="job-title"], a[data-test="job-link"], h2, h3')
+                    company_el = card.select_one('[data-test="employer-name"], [class*="EmployerProfile"], [class*="employerName"]')
+                    loc_el = card.select_one('[data-test="emp-location"], [class*="location"]')
+                    link_el = card.select_one('a[data-test="job-link"], a[href*="/job-listing/"], a[href*="/partner/jobListing"]')
 
                     title = title_el.get_text(strip=True) if title_el else ""
                     company = company_el.get_text(strip=True) if company_el else "Glassdoor Employer"
@@ -77,7 +83,7 @@ async def scrape_glassdoor(
                             location=loc,
                             url=full_url,
                             source="glassdoor",
-                            description=f"{title} na empresa {company} (via Glassdoor)",
+                            description=f"{title} na empresa {company} ({loc}) via Glassdoor",
                             publishedAt=datetime.now(timezone.utc).isoformat(),
                             workModel="Remoto" if "remoto" in (title + loc).lower() else "Presencial"
                         )
@@ -85,8 +91,5 @@ async def scrape_glassdoor(
         except Exception as e:
             logger.debug(f"[Glassdoor] Sessão direta encontrou desafio: {e}")
 
-    # Fallback seguro caso Cloudflare bloqueie requisição de datacenter
-    if not jobs:
-        logger.info(f"[Glassdoor] WAF Cloudflare ativo. Retornando consulta catalogada com segurança.")
-
+    logger.info(f"[Glassdoor] Finalizado com {len(jobs)} vagas capturadas.")
     return jobs

@@ -1,53 +1,63 @@
-import * as cheerio from 'cheerio';
-import { fetchHtml, JobScraper } from './base.js';
+import axios from 'axios';
+import { JobScraper } from './base.js';
 import { PlatformSource, RawJob } from '../types/job.js';
-import { parseRelativeDate, isOlderThanDays } from '../utils/date.js';
+import { cleanJobTitle } from '../config/jobFilters.js';
 
 export class RecruteiJobsScraper implements JobScraper {
   name = 'Recrutei Jobs (PeoplePlan)';
 
+  private targetCompanies = ['PeoplePlan'];
+
   async scrape(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
-    const targetUrls = [
-      'https://jobs.recrutei.com.br/PeoplePlan',
-    ];
 
-    for (const url of targetUrls) {
+    for (const company of this.targetCompanies) {
       try {
-        const html = await fetchHtml(url);
-        const $ = cheerio.load(html);
-
-        $('[class*="job"], [class*="vaga"], .card, article, a[href*="/position/"], a[href*="/vaga/"]').each((_, el) => {
-          const isLink = $(el).is('a');
-          const linkEl = isLink ? $(el) : $(el).find('a');
-          const titleEl = $(el).find('h2, h3, [class*="title"], [class*="name"]');
-
-          let title = titleEl.text().trim();
-          if (!title && isLink) {
-            title = $(el).text().trim();
+        const url = `https://api.recrutei.com.br/api/v2/vacancies/per-departments/${company}`;
+        const response = await axios.post(
+          url,
+          {},
+          {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              'Accept': 'application/json, text/plain, */*',
+            },
+            timeout: 10000,
           }
+        );
 
-          let href = linkEl.attr('href') || (isLink ? $(el).attr('href') : '') || '';
-          if (!title || !href || href === '#' || href.startsWith('javascript')) return;
+        const departments = response.data?.data?.vacancies || [];
+        for (const dep of departments) {
+          for (const item of dep.items || []) {
+            const rawTitle = item.title?.trim();
+            if (!rawTitle) continue;
 
-          const locationEl = $(el).find('[class*="location"], [class*="city"], [class*="badge"]');
-          const location = locationEl.text().trim() || 'Brasil';
+            const title = cleanJobTitle(rawTitle);
+            const publicUrl = item.public_link || `https://jobs.recrutei.com.br/${company}/vacancy/${item.id}-${item.slug || ''}`;
 
-          const publishedAt = new Date();
-          const fullUrl = href.startsWith('http') ? href : `https://jobs.recrutei.com.br${href.startsWith('/') ? '' : '/'}${href}`;
+            let location = 'Brasil';
+            if (item.remote === 1) {
+              location = 'Remoto';
+            } else if (Array.isArray(item.location) && item.location.length > 0) {
+              location = item.location.filter(Boolean).join(' / ');
+            }
 
-          jobs.push({
-            title,
-            company: 'PeoplePlan / Recrutei',
-            platform: PlatformSource.RECRUTEI_JOBS,
-            url: fullUrl,
-            description: `${title} - PeoplePlan (${location})`,
-            publishedAt,
-            location,
-          });
-        });
+            const salary = item.salary ? ` (${item.salary})` : '';
+            const description = `${title} na empresa ${item.company_name || company} - Departamento: ${item.department || dep.department || 'Geral'}${salary}`;
+
+            jobs.push({
+              title,
+              company: item.company_name || 'PeoplePlan / Recrutei',
+              platform: PlatformSource.RECRUTEI_JOBS,
+              url: publicUrl,
+              description,
+              publishedAt: new Date(),
+              location,
+            });
+          }
+        }
       } catch (err) {
-        console.warn(`[RecruteiJobsScraper] Aviso ao buscar "${url}":`, (err as Error).message);
+        console.warn(`[RecruteiJobsScraper] Aviso ao buscar vagas de "${company}":`, (err as Error).message);
       }
     }
 

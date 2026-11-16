@@ -1,7 +1,7 @@
 import * as cheerio from 'cheerio';
 import { fetchHtml, JobScraper } from './base.js';
 import { PlatformSource, RawJob } from '../types/job.js';
-import { parseRelativeDate, isOlderThanDays } from '../utils/date.js';
+import { cleanJobTitle } from '../config/jobFilters.js';
 
 export class BebeeScraper implements JobScraper {
   name = 'beBee';
@@ -9,7 +9,7 @@ export class BebeeScraper implements JobScraper {
   async scrape(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
     const seenUrls = new Set<string>();
-    const searchQueries = ['desenvolvedor', 'programador', 'react node', 'full stack'];
+    const searchQueries = ['desenvolvedor', 'programador', 'full stack', 'software'];
 
     for (const query of searchQueries) {
       try {
@@ -17,7 +17,7 @@ export class BebeeScraper implements JobScraper {
         const html = await fetchHtml(url);
         const $ = cheerio.load(html);
 
-        $('h3 a[href*="/br/jobs/"]').each((_, el) => {
+        $('a[href*="/br/jobs/"]').each((_, el) => {
           const href = $(el).attr('href') || '';
           if (
             !href ||
@@ -30,38 +30,34 @@ export class BebeeScraper implements JobScraper {
 
           const fullUrl = href.startsWith('http') ? href : `https://bebee.com${href}`;
           if (seenUrls.has(fullUrl)) return;
+
+          const rawText = $(el).text().trim().replace(/\s+/g, ' ');
+          if (rawText.length < 4) return;
+
+          const title = cleanJobTitle(rawText);
+
+          // Extrair empresa e local do slug da URL ou do card
+          // Ex: /br/jobs/desenvolvedor-junior-chromotech-itaquaquecetuba--ij-...
+          const slugMatch = href.match(/\/br\/jobs\/([a-zA-Z0-9_-]+)/);
+          let company = 'beBee Partner';
+          let location = 'Brasil';
+
+          if (slugMatch) {
+            const parts = slugMatch[1].split('--')[0].split('-');
+            if (parts.length >= 3) {
+              company = parts[parts.length - 2] || 'beBee Partner';
+              location = parts[parts.length - 1] || 'Brasil';
+            }
+          }
+
           seenUrls.add(fullUrl);
-
-          const title = $(el).text().trim();
-          if (!title) return;
-
-          // Localiza o card pai
-          const card = $(el).closest('div[role="link"]').length
-            ? $(el).closest('div[role="link"]')
-            : $(el)
-                .parents()
-                .filter((_, p) => $(p).find('h3 a[href*="/br/jobs/"]').length === 1 && $(p).find('p').length > 0)
-                .first();
-
-          const location =
-            card.find('svg.lucide-map-pin').parent().text().trim() || 'Brasil';
-          const company =
-            card.find('a[href*="/br/companies/"]').first().text().trim() ||
-            card.find('img + a, span.truncate a').first().text().trim() ||
-            'beBee Partner';
-          const description = card.find('p').first().text().trim() || `${title} - ${company} (${location})`;
-          const dateStr = card.find('svg.lucide-clock').parent().text().trim();
-
-          const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 7)) return;
-
           jobs.push({
             title,
             company,
             platform: PlatformSource.BEBEE,
             url: fullUrl,
-            description,
-            publishedAt,
+            description: `${title} - ${company} (${location})`,
+            publishedAt: new Date(),
             location,
           });
         });

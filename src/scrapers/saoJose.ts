@@ -1,8 +1,6 @@
 import * as cheerio from 'cheerio';
 import { fetchHtml, JobScraper } from './base.js';
 import { PlatformSource, RawJob } from '../types/job.js';
-import { parseRelativeDate, isOlderThanDays } from '../utils/date.js';
-
 import { cleanJobTitle } from '../config/jobFilters.js';
 
 export class SaoJoseScraper implements JobScraper {
@@ -10,46 +8,53 @@ export class SaoJoseScraper implements JobScraper {
 
   async scrape(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
-    const searchQueries = ['desenvolvedor', 'programador', 'software', 'estagio-ti'];
+    const seenUrls = new Set<string>();
+    const searchSlugs = ['', '?busca=desenvolvedor', '?busca=tecnologia', '?busca=programador'];
 
-    for (const q of searchQueries) {
+    for (const slug of searchSlugs) {
       try {
-        const url = `https://saojosemaisempregos.empregaja.org/vagas?q=${encodeURIComponent(q)}`;
+        const url = `https://saojosemaisempregos.empregaja.org/oportunidades${slug}`;
         const html = await fetchHtml(url);
         const $ = cheerio.load(html);
 
-        $('.card-vaga, .job-item, .vaga-card, article, .item-vaga').each((_, el) => {
-          const titleEl = $(el).find('h2, h3, .card-title, .vaga-titulo, a[href*="/vaga/"]');
-          const companyEl = $(el).find('.empresa, .company, .card-company');
-          const locationEl = $(el).find('.local, .cidade, .location, .card-location');
-          const dateEl = $(el).find('.data, time, .date, .card-date');
-          const linkEl = $(el).find('a[href*="/vaga"], a[href*="saojosemaisempregos"]');
-
-          const title = cleanJobTitle(titleEl.text());
-          let href = linkEl.attr('href') || titleEl.attr('href') || '';
-          if (!title || !href) return;
-
-          const company = companyEl.text().trim() || 'São José Mais Empregos';
-          const location = locationEl.text().trim() || 'São José / SC';
-          const dateStr = dateEl.text().trim();
-
-          const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 5)) return;
+        $('a.card-oportunidade, a[href*="/oportunidade/"]').each((_, el) => {
+          const href = $(el).attr('href') || '';
+          if (!href || href === '/oportunidades') return;
 
           const fullUrl = href.startsWith('http') ? href : `https://saojosemaisempregos.empregaja.org${href.startsWith('/') ? '' : '/'}${href}`;
+          if (seenUrls.has(fullUrl)) return;
 
+          const titleEl = $(el).find('.text_body_b3_bold, h2, h3').first();
+          let rawTitle = titleEl.text().trim();
+          if (!rawTitle) {
+            const imgAlt = $(el).find('img.card-img').attr('alt') || '';
+            rawTitle = imgAlt.replace(/^oportunidade\s+/i, '').trim();
+          }
+          if (!rawTitle) return;
+
+          const title = cleanJobTitle(rawTitle);
+
+          // Empresa: p com o ícone company.svg
+          const companyEl = $(el).find('img[src*="company.svg"]').parent();
+          const company = companyEl.text().trim() || $(el).find('img[src*="company.svg"]').attr('alt') || 'São José Mais Empregos';
+
+          // Localização
+          const locationEl = $(el).find('img[src*="location.svg"]').parent();
+          const location = locationEl.text().trim() || 'São José / SC';
+
+          seenUrls.add(fullUrl);
           jobs.push({
             title,
             company,
             platform: PlatformSource.SAO_JOSE,
             url: fullUrl,
             description: `${title} - ${company} (${location})`,
-            publishedAt,
+            publishedAt: new Date(),
             location,
           });
         });
       } catch (err) {
-        console.warn(`[SaoJoseScraper] Aviso ao buscar "${q}":`, (err as Error).message);
+        console.warn(`[SaoJoseScraper] Aviso ao buscar "${slug}":`, (err as Error).message);
       }
     }
 
