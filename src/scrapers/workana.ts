@@ -52,7 +52,7 @@ export class WorkanaScraper implements JobScraper {
           if (!hasTech) return;
 
           const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 3)) return; // Projetos recentes
+          if (isOlderThanDays(publishedAt, 7)) return; // Projetos recentes
 
           const fullUrl = href.startsWith('http') ? href : `https://www.workana.com${href.startsWith('/') ? '' : '/'}${href}`;
           const fullDesc = `[Workana Dev] ${title} - ${desc ? desc.slice(0, 300) : 'Sem detalhes'} ${budget ? `(${budget})` : ''}`.trim();
@@ -105,7 +105,7 @@ export class WorkanaScraper implements JobScraper {
           if (!hasTech) continue;
 
           const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 3)) continue;
+          if (isOlderThanDays(publishedAt, 7)) continue;
 
           const fullUrl = href.startsWith('http') ? href : `https://www.workana.com${href.startsWith('/') ? '' : '/'}${href}`;
 

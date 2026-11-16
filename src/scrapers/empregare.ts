@@ -1,46 +1,48 @@
 import * as cheerio from 'cheerio';
 import { fetchHtml, createStealthContext, JobScraper } from './base.js';
 import { PlatformSource, RawJob } from '../types/job.js';
-import { parseRelativeDate, isOlderThanDays } from '../utils/date.js';
+import { cleanJobTitle } from '../config/jobFilters.js';
 
 export class EmpregareScraper implements JobScraper {
   name = 'Empregare';
 
   async scrape(): Promise<RawJob[]> {
-    // Empregare depende de renderização dinâmica no navegador via JavaScript.
-    // Inicialização direta via Playwright Stealth para otimizar tempo no pipeline.
+    try {
+      const jobs = await this.scrapeViaHttp();
+      if (jobs.length > 0) return jobs;
+    } catch (e) {
+      console.warn('[EmpregareScraper] HTTP falhou, tentando Playwright:', (e as Error).message);
+    }
     return await this.scrapeViaPlaywright();
   }
 
   private async scrapeViaHttp(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
-    const searchSlugs = ['desenvolvedor', 'programador', 'junior', 'full-stack', 'ti'];
+    const seenUrls = new Set<string>();
+    const searchSlugs = ['desenvolvedor', 'programador', 'tecnologia', 'software', 'ti'];
 
     for (const slug of searchSlugs) {
       try {
-        const url = `https://empregare.com/pt-br/vagas?q=${encodeURIComponent(slug)}`;
+        const url = `https://www.empregare.com/pt-br/vagas?q=${encodeURIComponent(slug)}`;
         const html = await fetchHtml(url);
         const $ = cheerio.load(html);
 
-        $('.card-vaga, .vaga-item, .job-item, article, [data-vaga-id]').each((_, el) => {
-          const titleEl = $(el).find('h2 a, h3 a, .titulo-vaga a, a[href*="/vaga/"]');
-          const companyEl = $(el).find('.empresa, .company, .nome-empresa');
-          const locationEl = $(el).find('.cidade, .local, .location');
-          const dateEl = $(el).find('time, .data, .date');
+        $('li.card[data-id], .card[data-id]').each((_, el) => {
+          const linkEl = $(el).find('h2.card__t a, a[data-vaga]').first();
+          const href = linkEl.attr('href') || '';
+          const rawTitle = linkEl.text().trim();
+          if (!rawTitle) return;
 
-          const title = titleEl.text().trim();
-          let href = titleEl.attr('href') || $(el).find('a').attr('href') || '';
-          if (!title || !href) return;
+          const title = cleanJobTitle(rawTitle);
+          const fullUrl = href.startsWith('http') ? href : `https://www.empregare.com${href.startsWith('/') ? '' : '/'}${href}`;
+          if (seenUrls.has(fullUrl)) return;
 
-          const company = companyEl.text().trim() || 'Empresa Empregare';
-          const location = locationEl.text().trim() || 'Brasil';
-          const dateStr = dateEl.text().trim();
+          const company = $(el).find('.card__e').text().trim() || 'Empresa Empregare';
+          const location = $(el).find('.card__l').text().trim().replace(/\s*·\s*/, ' / ') || 'Brasil';
+          const dateStr = $(el).find('time.card__d').attr('datetime') || '';
+          const publishedAt = dateStr ? new Date(dateStr) : new Date();
 
-          const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 7)) return;
-
-          const fullUrl = href.startsWith('http') ? href : `https://empregare.com${href.startsWith('/') ? '' : '/'}${href}`;
-
+          seenUrls.add(fullUrl);
           jobs.push({
             title,
             company,
@@ -56,57 +58,54 @@ export class EmpregareScraper implements JobScraper {
       }
     }
 
-    if (jobs.length > 0) return jobs;
-    throw new Error('Nenhuma vaga capturada via HTTP na Empregare');
+    return jobs;
   }
 
   private async scrapeViaPlaywright(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
-    const searchUrl = 'https://empregare.com/pt-br/vagas?q=desenvolvedor';
+    const searchUrl = 'https://www.empregare.com/pt-br/vagas?q=desenvolvedor';
     const { browser, context, page } = await createStealthContext();
 
     try {
       await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(2000);
 
-      const cards = await page.$$('.card-vaga, .vaga-item, .job-item, article');
+      const cardData = await page.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('li.card[data-id], .card[data-id]'));
+        return cards.map((card) => {
+          const linkEl = card.querySelector('h2.card__t a, a[data-vaga]') as HTMLAnchorElement;
+          const rawTitle = linkEl ? linkEl.innerText.trim() : '';
+          const href = linkEl ? linkEl.getAttribute('href') : '';
+          const companyEl = card.querySelector('.card__e') as HTMLElement;
+          const locationEl = card.querySelector('.card__l') as HTMLElement;
+          const dateEl = card.querySelector('time.card__d') as HTMLElement;
 
-      for (const card of cards) {
-        try {
-          const titleEl = await card.$('h2 a, h3 a, .titulo-vaga a, a[href*="/vaga/"]');
-          const companyEl = await card.$('.empresa, .company');
-          const locationEl = await card.$('.cidade, .local');
-          const dateEl = await card.$('time, .data, .date');
+          return {
+            title: rawTitle,
+            href,
+            company: companyEl ? companyEl.innerText.trim() : 'Empresa Empregare',
+            location: locationEl ? locationEl.innerText.trim() : 'Brasil',
+            dateStr: dateEl ? dateEl.getAttribute('datetime') : null,
+          };
+        }).filter((j) => j.title && j.href);
+      });
 
-          const title = titleEl ? (await titleEl.innerText()).trim() : '';
-          const href = titleEl ? await titleEl.getAttribute('href') : '';
-          const company = companyEl ? (await companyEl.innerText()).trim() : 'Empresa Empregare';
-          const location = locationEl ? (await locationEl.innerText()).trim() : 'Brasil';
-          const dateStr = dateEl ? (await dateEl.innerText()).trim() : '';
-
-          if (!title || !href) continue;
-
-          const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 7)) continue;
-
-          const fullUrl = href.startsWith('http') ? href : `https://empregare.com${href.startsWith('/') ? '' : '/'}${href}`;
-
-          jobs.push({
-            title,
-            company,
-            platform: PlatformSource.EMPREGARE,
-            url: fullUrl,
-            description: `${title} - ${company} (${location})`,
-            publishedAt,
-            location,
-          });
-        } catch {}
+      for (const item of cardData) {
+        const fullUrl = item.href?.startsWith('http') ? item.href : `https://www.empregare.com${item.href?.startsWith('/') ? '' : '/'}${item.href}`;
+        jobs.push({
+          title: cleanJobTitle(item.title),
+          company: item.company,
+          platform: PlatformSource.EMPREGARE,
+          url: fullUrl,
+          description: `${item.title} - ${item.company} (${item.location})`,
+          publishedAt: item.dateStr ? new Date(item.dateStr) : new Date(),
+          location: item.location,
+        });
       }
     } catch (err) {
-      console.warn('[EmpregareScraper] Playwright erro:', (err as Error).message);
+      console.warn('[EmpregareScraper] Erro Playwright:', (err as Error).message);
     } finally {
-      await context.close();
-      await browser.close();
+      await browser.close().catch(() => {});
     }
 
     return jobs;

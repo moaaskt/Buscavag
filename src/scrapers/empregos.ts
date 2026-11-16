@@ -1,17 +1,19 @@
 import * as cheerio from 'cheerio';
 import { fetchHtml, JobScraper } from './base.js';
 import { PlatformSource, RawJob } from '../types/job.js';
-import { parseRelativeDate, isOlderThanDays } from '../utils/date.js';
+import { cleanJobTitle } from '../config/jobFilters.js';
 
 export class EmpregosScraper implements JobScraper {
   name = 'Empregos.com.br';
 
   async scrape(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
+    const seenUrls = new Set<string>();
     const searchSlugs = [
+      'desenvolvedor',
+      'programador',
       'desenvolvedor-junior',
       'desenvolvedor-full-stack',
-      'programador-junior',
     ];
 
     for (const slug of searchSlugs) {
@@ -20,32 +22,45 @@ export class EmpregosScraper implements JobScraper {
         const html = await fetchHtml(url);
         const $ = cheerio.load(html);
 
-        $('.item-vaga, .card-vaga, article, [class*="item-list"], .vacancy-item').each((_, el) => {
-          const titleEl = $(el).find('h2 a, h3 a, .title a, a[href*="/vagas/"]');
-          const companyEl = $(el).find('.nome-empresa, .company, [class*="company"]');
-          const locationEl = $(el).find('.cidade, .location, [class*="location"]');
-          const dateEl = $(el).find('.data, time, [class*="date"]');
-
-          const title = titleEl.text().trim();
-          let href = titleEl.attr('href') || $(el).find('a').attr('href') || '';
-          if (!title || !href) return;
-
-          const company = companyEl.text().trim() || 'Empregos.com.br Partner';
-          const location = locationEl.text().trim() || 'Brasil';
-          const dateStr = dateEl.text().trim();
-
-          const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 5)) return;
+        $('[class*="cmp-job-card-area-expand"]').each((_, el) => {
+          const linkEl = $(el).find('a[href*="/vaga/"]').first();
+          const href = linkEl.attr('href') || '';
+          if (!href) return;
 
           const fullUrl = href.startsWith('http') ? href : `https://www.empregos.com.br${href.startsWith('/') ? '' : '/'}${href}`;
+          if (seenUrls.has(fullUrl)) return;
 
+          const titleEl = $(el).find('h2').first();
+          const rawTitle = titleEl.text().trim();
+          if (!rawTitle) return;
+
+          const title = cleanJobTitle(rawTitle);
+
+          // Empresa
+          const companyEl = $(el).find('h3 a').first();
+          const imgAlt = $(el).find('img[alt*="empresa"]').attr('alt') || '';
+          let company = companyEl.text().trim();
+          if (!company && imgAlt) {
+            company = imgAlt.replace(/^Logo da empresa\s*/i, '').trim();
+          }
+          if (!company) company = 'Empregos Partner';
+
+          // Localização
+          const cardText = $(el).text().replace(/\s+/g, ' ');
+          let location = 'Brasil';
+          const locMatch = cardText.match(/([A-Za-zÀ-ÖØ-öø-ÿ\s]{3,30}),\s*([A-Z]{2})/);
+          if (locMatch) {
+            location = `${locMatch[1].trim()}, ${locMatch[2]}`;
+          }
+
+          seenUrls.add(fullUrl);
           jobs.push({
             title,
             company,
             platform: PlatformSource.EMPREGOS,
             url: fullUrl,
             description: `${title} - ${company} (${location})`,
-            publishedAt,
+            publishedAt: new Date(),
             location,
           });
         });

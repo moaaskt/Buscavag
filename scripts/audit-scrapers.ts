@@ -16,6 +16,7 @@ import { ProgramathorScraper } from '../src/scrapers/programathor.js';
 import { RemotarScraper } from '../src/scrapers/remotar.js';
 import { CathoScraper } from '../src/scrapers/catho.js';
 import { GlassdoorScraper } from '../src/scrapers/glassdoor.js';
+import { BebeeScraper } from '../src/scrapers/bebee.js';
 // Regionais SC
 import { SaoJoseScraper } from '../src/scrapers/saoJose.js';
 import { VagasScScraper } from '../src/scrapers/vagasSc.js';
@@ -97,6 +98,7 @@ function getAllScrapers(): JobScraper[] {
     new RemotarScraper(),
     new CathoScraper(),
     new GlassdoorScraper(),
+    new BebeeScraper(),
     // Regionais SC
     new SaoJoseScraper(),
     new VagasScScraper(),
@@ -172,7 +174,6 @@ async function runAudit() {
   console.log(`\n======================================================`);
   console.log(` 🔍 AUDITORIA DE SCRAPERS - BUSCAVAG (${total} FONTES ATIVAS)`);
   console.log(` ⚙️  Concorrência: ${CONCURRENCY_LIMIT} | Timeout: ${SCRAPER_TIMEOUT_MS / 1000}s`);
-  console.log(` 🚫 Fonte beBee: DESATIVADA (Pago/Descartada)`);
   console.log(`======================================================\n`);
 
   const results: ScraperAuditResult[] = [];

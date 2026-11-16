@@ -1,8 +1,6 @@
 import * as cheerio from 'cheerio';
 import { fetchHtml, JobScraper } from './base.js';
 import { PlatformSource, RawJob } from '../types/job.js';
-import { parseRelativeDate, isOlderThanDays } from '../utils/date.js';
-
 import { cleanJobTitle } from '../config/jobFilters.js';
 
 export class VagasFloripaScraper implements JobScraper {
@@ -10,37 +8,38 @@ export class VagasFloripaScraper implements JobScraper {
 
   async scrape(): Promise<RawJob[]> {
     const jobs: RawJob[] = [];
+    const seenUrls = new Set<string>();
     const searchQueries = ['desenvolvedor', 'programador', 'full stack', 'software'];
 
     for (const q of searchQueries) {
       try {
-        const url = `https://vagasfloripa.com.br/?s=${encodeURIComponent(q)}`;
+        const url = `https://www.vagasfloripa.com.br/?post_type=job_listing&s=${encodeURIComponent(q)}`;
         const html = await fetchHtml(url);
         const $ = cheerio.load(html);
 
-        $('article, .post, .vaga, .entry-card, .type-post').each((_, el) => {
-          const titleEl = $(el).find('.entry-title a, h2 a, h3 a, a[rel="bookmark"]');
-          const dateEl = $(el).find('time, .entry-date, .published, .post-date');
-          const excerptEl = $(el).find('.entry-summary, .entry-content, p');
+        $('.job_listing, li.job_listing, article.job_listing').each((_, el) => {
+          const linkEl = $(el).find('a[href*="/vagas/"]').first();
+          const href = linkEl.attr('href') || $(el).find('a').attr('href') || '';
+          if (!href || seenUrls.has(href)) return;
 
-          const title = cleanJobTitle(titleEl.text());
-          const href = titleEl.attr('href');
-          if (!title || !href) return;
+          const titleEl = $(el).find('h3, h2, .job_listing-title').first();
+          const rawTitle = titleEl.text().trim() || linkEl.text().trim();
+          if (!rawTitle) return;
 
-          const dateStr = dateEl.text().trim() || dateEl.attr('datetime') || '';
-          const publishedAt = parseRelativeDate(dateStr);
-          if (isOlderThanDays(publishedAt, 5)) return;
+          const title = cleanJobTitle(rawTitle);
+          const company = $(el).find('.company, .employer, [class*="company"]').first().text().trim() || 'Vagas Floripa';
+          const location = $(el).find('.location, [class*="location"]').first().text().trim() || 'Florianópolis / SC';
+          const excerpt = $(el).text().replace(/\s+/g, ' ').substring(0, 200);
 
-          const excerpt = excerptEl.text().trim();
-
+          seenUrls.add(href);
           jobs.push({
             title,
-            company: 'Vagas Floripa',
+            company,
             platform: PlatformSource.VAGAS_FLORIPA,
-            url: href.startsWith('http') ? href : `https://vagasfloripa.com.br${href}`,
+            url: href.startsWith('http') ? href : `https://www.vagasfloripa.com.br${href}`,
             description: excerpt ? `${title} - ${excerpt}` : title,
-            publishedAt,
-            location: 'Florianópolis / SC',
+            publishedAt: new Date(),
+            location,
           });
         });
       } catch (err) {
