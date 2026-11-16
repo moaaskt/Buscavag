@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -534,9 +535,75 @@ export class LinkedInPostsScraper implements JobScraper {
           });
           console.log(`[LinkedInPostsScraper] 🖥️ Inicializado contexto persistente em "${profileDir}".`);
         } catch (launchErr: any) {
-          console.warn('[LinkedInPostsScraper] ℹ️ Chrome de automação não detectado na porta 9222 e fallback indisponível:', launchErr.message);
-          return [];
+          console.warn('[LinkedInPostsScraper] ℹ️ Perfil persistente bloqueado, iniciando contexto isolado limpo:', launchErr.message);
+          try {
+            browser = await chromium.launch({
+              headless: false,
+              channel: 'chrome',
+              args: [
+                '--no-sandbox',
+                '--disable-blink-features=AutomationControlled',
+                '--no-first-run',
+                '--no-default-browser-check',
+              ],
+            });
+            context = await browser.newContext({
+              userAgent: FIXED_USER_AGENT,
+              viewport: { width: 1280, height: 800 },
+            });
+          } catch (cleanErr: any) {
+            console.error('[LinkedInPostsScraper] ❌ Falha crítica ao inicializar navegador:', cleanErr.message);
+            return [];
+          }
         }
+      }
+
+      // 5.5 Injeção de Cookies de Autenticação (.env e li-cookies.json)
+      try {
+        const sessionCookie = (process.env.LINKEDIN_SESSION_COOKIE || process.env.LINKEDIN_COOKIE_LI_AT || '').trim();
+        const jsessionId = (process.env.LINKEDIN_JSESSIONID || '').trim().replace(/^"|"$/g, '');
+
+        let cookiesToAdd: any[] = [];
+        const liCookiesPath = path.resolve(process.cwd(), 'li-cookies.json');
+        if (fs.existsSync(liCookiesPath)) {
+          try {
+            cookiesToAdd = JSON.parse(fs.readFileSync(liCookiesPath, 'utf-8'));
+          } catch {}
+        }
+
+        // Remove li_at e JSESSIONID antigos
+        cookiesToAdd = cookiesToAdd.filter((c: any) => c.name !== 'li_at' && c.name !== 'JSESSIONID');
+
+        if (sessionCookie) {
+          cookiesToAdd.push({
+            name: 'li_at',
+            value: sessionCookie,
+            domain: '.linkedin.com',
+            path: '/',
+            httpOnly: true,
+            secure: true,
+            sameSite: 'None',
+          });
+        }
+
+        if (jsessionId) {
+          cookiesToAdd.push({
+            name: 'JSESSIONID',
+            value: `"${jsessionId}"`,
+            domain: '.linkedin.com',
+            path: '/',
+            httpOnly: false,
+            secure: true,
+            sameSite: 'None',
+          });
+        }
+
+        if (cookiesToAdd.length > 0) {
+          await context.addCookies(cookiesToAdd);
+          console.log(`[LinkedInPostsScraper] 🔑 Sessão injetada com sucesso (${cookiesToAdd.length} cookies).`);
+        }
+      } catch (cookieErr: any) {
+        console.warn('[LinkedInPostsScraper] ⚠️ Aviso ao injetar cookies:', cookieErr?.message);
       }
 
       // 6. Aba Própria e Isolada
@@ -601,16 +668,20 @@ export class LinkedInPostsScraper implements JobScraper {
         } catch {}
       });
 
-      // 8. Navegação Humana: entrar por /feed/ primeiro
+      // 8. Navegação Humana: tentar entrar por /feed/ primeiro
       console.log('[LinkedInPostsScraper] Acessando https://www.linkedin.com/feed/ ...');
-      await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 35000 });
-      await this.humanPause(1200, 2200);
+      try {
+        await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 35000 });
+        await this.humanPause(1200, 2200);
 
-      const currentUrl = page.url();
-      if (currentUrl.includes('/checkpoint') || currentUrl.includes('/authwall') || currentUrl.includes('/login')) {
-        console.warn('[LinkedInPostsScraper] ⚠️ LinkedIn exigiu login/checkpoint. Ativando cooldown de 6 horas.');
-        this.setCooldown(6, 'Checkpoint ou tela de login detectada em /feed/');
-        return [];
+        const currentUrl = page.url();
+        if (currentUrl.includes('/checkpoint') || currentUrl.includes('/authwall') || currentUrl.includes('/login')) {
+          console.warn('[LinkedInPostsScraper] ⚠️ LinkedIn exigiu login/checkpoint. Ativando cooldown de 6 horas.');
+          this.setCooldown(6, 'Checkpoint ou tela de login detectada em /feed/');
+          return [];
+        }
+      } catch (feedErr: any) {
+        console.warn('[LinkedInPostsScraper] ℹ️ Aviso ao carregar feed principal (tentando seguir diretamente para fontes):', feedErr?.message);
       }
 
       // 9. Navegação sequencial com salvamento parcial e controle de deadline
@@ -1304,6 +1375,13 @@ export class LinkedInPostsScraper implements JobScraper {
     if (!fs.existsSync(COOLDOWN_FILE)) return false;
     try {
       const data = JSON.parse(fs.readFileSync(COOLDOWN_FILE, 'utf-8'));
+      const currentCookie = (process.env.LINKEDIN_SESSION_COOKIE || process.env.LINKEDIN_COOKIE_LI_AT || '').trim();
+      const currentHash = currentCookie ? crypto.createHash('md5').update(currentCookie).digest('hex') : '';
+      if (data.cookieHash && currentHash && data.cookieHash !== currentHash) {
+        console.log('[LinkedInPostsScraper] 🔄 Novo cookie do LinkedIn detectado no .env! Cooldown resetado automaticamente.');
+        try { fs.unlinkSync(COOLDOWN_FILE); } catch {}
+        return false;
+      }
       if (data.pausedUntil && Date.now() < data.pausedUntil) {
         const remainingMin = Math.round((data.pausedUntil - Date.now()) / (60 * 1000));
         console.warn(
@@ -1322,9 +1400,11 @@ export class LinkedInPostsScraper implements JobScraper {
       const pausedUntil = Date.now() + hours * 3600 * 1000;
       const dir = path.dirname(COOLDOWN_FILE);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const currentCookie = (process.env.LINKEDIN_SESSION_COOKIE || process.env.LINKEDIN_COOKIE_LI_AT || '').trim();
+      const cookieHash = currentCookie ? crypto.createHash('md5').update(currentCookie).digest('hex') : undefined;
       fs.writeFileSync(
         COOLDOWN_FILE,
-        JSON.stringify({ pausedUntil, reason, timestamp: new Date().toISOString() }, null, 2),
+        JSON.stringify({ pausedUntil, reason, cookieHash, timestamp: new Date().toISOString() }, null, 2),
         'utf-8'
       );
       console.warn(`[LinkedInPostsScraper] 🛑 Ativado cooldown de ${hours}h para o LinkedIn (${reason}).`);

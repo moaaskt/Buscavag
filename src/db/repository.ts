@@ -263,8 +263,9 @@ export class JobRepository {
 
     sql += ' WHERE 1=1';
 
-    // Blindagem de visibilidade pública / candidato: apenas vagas ativas
+    // Blindagem de visibilidade pública / candidato: apenas vagas ativas e de software/programação
     if (!filters?.adminMode) {
+      sql += ' AND (jobs.is_tech_software = 1 OR jobs.is_tech_software IS NULL)';
       if (filters?.jobStatus && filters.jobStatus !== 'all') {
         sql += ' AND jobs.status = ?';
         params.push(filters.jobStatus);

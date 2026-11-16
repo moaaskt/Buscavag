@@ -76,6 +76,35 @@ async function runFilterTests() {
     'ESTAGIÁRIO DE MARKETINGCandidatar-se',
     'ESTÁGIO EM MARKETING / PUBLICIDADE E PROPAGANDA - VGACNR309Candidatar-se',
     'Social Media e Copywriter',
+    // Suporte Técnico, Help Desk e Service Desk (Não-Programação)
+    'Técnico de Suporte de TI',
+    'Analista de Suporte Júnior',
+    'Help Desk N1',
+    'Service Desk N2',
+    'Técnico de Informática e Manutenção',
+    // Consultoria Funcional ERP/CRM e Sustentação sem código
+    '11068 - Consultor(a) SAP PM - Sênior',
+    '11096 - Consultor(a) SAP FI - Sênior',
+    '11086 - Consultor(a) SAP MM - Senior',
+    '11105 - Consultor(a) SAP SD (Reforma Tributária) - Sênior',
+    '11102 - Consultor(a) SAP PP - Sênior',
+    'Consultor SAP Business One Sênior',
+    '11100 - Analista de Sustentação de Sistemas Oracle EBS/Salesforce PL',
+    'Consultor Funcional Protheus TOTVS',
+    // Infraestrutura Física, Redes e Telecomunicações
+    'INTERCÂMBIO- ESTÁGIO DE ENGENHEIRO DE REDES NA SÉRVIA',
+    'Analista de Redes e Telecom',
+    'Técnico de Cabeamento e Fibra Óptica',
+    'Analista de Infraestrutura de TI e CFTV',
+    // Gestão Ágil, Produtos e Metodologias sem código
+    'Product Owner Tech',
+    'Product Manager',
+    'Scrum Master Pleno',
+    'Agilista / Agile Coach',
+    'Analista de Negócios (Business Analyst)',
+    // Design puro sem programação
+    'UI/UX Designer Sênior',
+    'Product Designer Pleno',
   ];
 
   for (const title of nonTechTestCases) {
@@ -106,7 +135,9 @@ async function runFilterTests() {
     'Desenvolvedor CRM Jr - Automação e Integrações (Marketing)',
     'Solutions Engineer',
     'Senior Swift & SwiftUI DeveloperNOVA',
-    'Técnico de Suporte de TI',
+    'Desenvolvedor SAP ABAP Sênior',
+    'Engenheiro de Dados Python / Spark',
+    'Desenvolvedor Java Spring Boot',
     'Analista de Segurança da Informação',
     '[Workana] Desenvolvimento de Sistema de Atendimento Multi-Whatsapp',
   ];
