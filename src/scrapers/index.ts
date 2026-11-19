@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
 
 export type { JobScraper } from './base.js';
 export { GupyScraper } from './gupy.js';
@@ -168,13 +169,29 @@ export class ScraperOrchestrator {
   }
 
   async runAll(targetScraperName?: string): Promise<RawJob[]> {
-    const scrapersToRun = targetScraperName
-      ? this.scrapers.filter(
-          (s) =>
-            s.name.toLowerCase() === targetScraperName.toLowerCase() ||
-            s.name.toLowerCase().includes(targetScraperName.toLowerCase())
-        )
-      : this.scrapers;
+    let scrapersToRun: JobScraper[];
+
+    if (targetScraperName) {
+      const tokens = targetScraperName
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+
+      const selected = new Set<JobScraper>();
+      for (const token of tokens) {
+        const exactMatches = this.scrapers.filter((s) => s.name.toLowerCase() === token);
+        const matches =
+          exactMatches.length > 0
+            ? exactMatches
+            : this.scrapers.filter((s) => s.name.toLowerCase().includes(token));
+        for (const match of matches) {
+          selected.add(match);
+        }
+      }
+      scrapersToRun = Array.from(selected);
+    } else {
+      scrapersToRun = this.scrapers;
+    }
 
     if (scrapersToRun.length === 0) {
       this.logger.warn(`Nenhum conector encontrado com o nome "${targetScraperName}".`, {
@@ -184,8 +201,13 @@ export class ScraperOrchestrator {
       return [];
     }
 
+    const needsPython = scrapersToRun.some((s) => s.requiresPython);
     // Checagem de disponibilidade do microserviço Python Scrapling Engine
-    const isPythonAvailable = await this.pythonBridge.isAvailable();
+    let isPythonAvailable = await this.pythonBridge.isAvailable();
+    if (!isPythonAvailable && needsPython) {
+      isPythonAvailable = await this.ensurePythonBridgeAvailable();
+    }
+
     if (isPythonAvailable) {
       this.logger.info('🐍 Microserviço Scrapling Engine (Python) está ONLINE e operacional.', {
         step: 'PROGRESS',
@@ -198,10 +220,14 @@ export class ScraperOrchestrator {
       });
     }
 
+    const startMsg = targetScraperName
+      ? scrapersToRun.length > 1
+        ? `Iniciando execução seletiva de ${scrapersToRun.length} conectores (${scrapersToRun.map((s) => s.name).join(', ')})...`
+        : `Iniciando execução individual do conector "${scrapersToRun[0].name}"...`
+      : `Iniciando execução paralela de ${scrapersToRun.length} scrapers (Concorrência: ${this.concurrency}, Timeout padrão: ${this.timeoutPerScraperMs / 1000}s)...`;
+
     this.logger.info(
-      targetScraperName
-        ? `Iniciando execução individual do conector "${scrapersToRun[0].name}"...`
-        : `Iniciando execução paralela de ${scrapersToRun.length} scrapers (Concorrência: ${this.concurrency}, Timeout padrão: ${this.timeoutPerScraperMs / 1000}s)...`,
+      startMsg,
       {
         step: 'START',
         data: { totalScrapers: scrapersToRun.length, concurrency: this.concurrency, pythonEngineOnline: isPythonAvailable },
@@ -218,7 +244,7 @@ export class ScraperOrchestrator {
       const scraperStart = Date.now();
       
       const shouldUsePython = Boolean(scraper.requiresPython && isPythonAvailable);
-      const engineName = shouldUsePython ? 'python' : 'node';
+      const engineName: 'python' | 'node' = scraper.requiresPython ? 'python' : 'node';
 
       // Timeout próprio por scraper (ex.: LinkedIn Posts usa 180s, outros usam 45s)
       const scraperTimeout = scraper.timeoutMs || this.timeoutPerScraperMs;
@@ -373,5 +399,64 @@ export class ScraperOrchestrator {
         'utf-8'
       );
     } catch {}
+  }
+
+  /**
+   * Inicializa automaticamente o microserviço Python Scrapling Engine local
+   * caso ele esteja configurado em localhost/127.0.0.1 e ainda não esteja respondendo.
+   */
+  private async ensurePythonBridgeAvailable(): Promise<boolean> {
+    try {
+      const parsed = new URL(this.pythonBridge.getBaseUrl());
+      const host = parsed.hostname;
+      if (host !== '127.0.0.1' && host !== 'localhost') {
+        return false;
+      }
+
+      const appDir = path.resolve(process.cwd(), 'src', 'services', 'scrapling-engine');
+      if (!fs.existsSync(appDir)) {
+        return false;
+      }
+
+      const port = parsed.port || '8000';
+      const venvWin = path.resolve(process.cwd(), '.venv', 'Scripts', 'python.exe');
+      const venvPosix = path.resolve(process.cwd(), '.venv', 'bin', 'python');
+      const pythonBin = fs.existsSync(venvWin)
+        ? venvWin
+        : fs.existsSync(venvPosix)
+          ? venvPosix
+          : 'python';
+
+      this.logger.info(`🐍 Iniciando automaticamente Scrapling Engine local em ${host}:${port}...`, {
+        step: 'PROGRESS',
+        data: { host, port },
+      });
+
+      const child = spawn(
+        pythonBin,
+        ['-m', 'uvicorn', 'app.main:app', '--app-dir', 'src/services/scrapling-engine', '--port', port, '--host', host],
+        {
+          cwd: process.cwd(),
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+        }
+      );
+      child.unref();
+
+      const maxAttempts = 24; // até 12s (24 * 500ms)
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        if (await this.pythonBridge.isAvailable()) {
+          return true;
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`⚠️ Falha ao tentar iniciar Scrapling Engine automaticamente: ${(err as Error).message}`, {
+        step: 'PROGRESS',
+      });
+    }
+
+    return false;
   }
 }
