@@ -44,3 +44,7 @@ CLAUDE.md
 data/linkedin-*.json
 data/scrapling-alert-cooldown.json
 admincn-v1.0.0
+
+# Planning & GSD
+.planning/
+.planning_backup/
