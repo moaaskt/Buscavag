@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 import httpx
 from bs4 import BeautifulSoup
@@ -15,6 +15,51 @@ HEADERS = {
     "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8",
 }
 
+
+def parse_geekhunter_date(text: str) -> str:
+    """Converte strings relativas como 'Publicada há 19 minutos' ou 'Publicada há 2 dias' para ISO UTC."""
+    now = datetime.now(timezone.utc)
+    if not text:
+        return now.isoformat()
+
+    cleaned = text.lower().strip()
+    if any(k in cleaned for k in ("agora", "minuto", "hora", "hoje")):
+        min_match = re.search(r"(\d+)\s*minuto", cleaned)
+        if min_match:
+            return (now - timedelta(minutes=int(min_match.group(1)))).isoformat()
+        hr_match = re.search(r"(\d+)\s*hora", cleaned)
+        if hr_match:
+            return (now - timedelta(hours=int(hr_match.group(1)))).isoformat()
+        return now.isoformat()
+
+    if "ontem" in cleaned:
+        return (now - timedelta(days=1)).isoformat()
+
+    days_match = re.search(r"(\d+)\s*dia", cleaned)
+    if days_match:
+        return (now - timedelta(days=int(days_match.group(1)))).isoformat()
+
+    weeks_match = re.search(r"(\d+)\s*semana", cleaned)
+    if weeks_match:
+        return (now - timedelta(weeks=int(weeks_match.group(1)))).isoformat()
+
+    months_match = re.search(r"(\d+)\s*m[eê]s", cleaned)
+    if months_match:
+        return (now - timedelta(days=int(months_match.group(1)) * 30)).isoformat()
+
+    return now.isoformat()
+
+
+def _extract_company_from_url(job_url: str) -> Optional[str]:
+    match = re.search(r"/pt/([^/]+)/jobs/", job_url)
+    if not match:
+        return None
+    slug = re.sub(r"-\d+$", "", match.group(1)).strip("-")
+    if not slug:
+        return None
+    return slug.replace("-", " ").title()
+
+
 async def scrape_geekhunter(
     query: Optional[str] = "desenvolvedor",
     location: Optional[str] = None,
@@ -22,16 +67,16 @@ async def scrape_geekhunter(
     options: Optional[Dict[str, Any]] = None,
 ) -> List[JobResponseItem]:
     """
-    Scraper resiliente para a plataforma GeekHunter.
+    Scraper resiliente para a plataforma GeekHunter com paginação real e extração de empresa, data e descrição.
     """
     raw_query = (query or "desenvolvedor").strip()
     urls = [
         "https://www.geekhunter.com/pt/vagas",
-        "https://www.geekhunter.com.br/vagas",
+        "https://www.geekhunter.com/pt/vagas?page=2",
     ]
 
     jobs: List[JobResponseItem] = []
-    seen_titles = set()
+    seen_urls = set()
 
     async with httpx.AsyncClient(headers=HEADERS, timeout=20.0, follow_redirects=True) as client:
         for url in urls:
@@ -45,74 +90,102 @@ async def scrape_geekhunter(
                     logger.warning(f"[GeekHunter] Status HTTP {response.status_code} para {url}")
                     continue
 
-                html = response.text
-                soup = BeautifulSoup(html, "html.parser")
+                soup = BeautifulSoup(response.text, "html.parser")
+                cards = soup.select('article, .job-card, .vaga-card, [data-testid="job-card"], .job-item, [class*="JobCard"]')
 
-                # 1. Parse de elementos DOM padrão se renderizados
-                cards = soup.select('.job-card, .vaga-card, [data-testid="job-card"], article, .job-item, [class*="JobCard"]')
                 for card in cards:
                     if len(jobs) >= limit:
                         break
 
-                    title_el = card.select_one('h2, h3, a[href*="/vagas/"], [class*="title"]')
+                    title_el = card.select_one('h3 a, h2 a, h2, h3, a[href*="/jobs/"], a[href*="/vagas/"], [class*="title"]')
                     if not title_el:
                         continue
-                    title = title_el.get_text(strip=True)
-                    if not title or len(title) < 3 or title in seen_titles:
+                    title = re.sub(r"\s+", " ", title_el.get_text(" ", strip=True)).strip()
+                    if not title or len(title) < 3:
                         continue
-                    seen_titles.add(title)
+
+                    link_el = card.select_one('a[href*="/jobs/"], a[href*="/vagas/"], a[href^="http"]')
+                    href = link_el.get("href", "") if link_el else ""
+                    if href.startswith("http"):
+                        full_url = href
+                    elif href.startswith("/"):
+                        full_url = f"https://www.geekhunter.com{href}"
+                    else:
+                        full_url = f"https://www.geekhunter.com/{href}" if href else url
+
+                    if full_url in seen_urls:
+                        continue
+                    seen_urls.add(full_url)
 
                     company_el = card.select_one('.company-name, .company, .empresa, [class*="company"]')
-                    company = company_el.get_text(strip=True) if company_el else "GeekHunter Tech"
+                    company = company_el.get_text(" ", strip=True) if company_el else ""
+                    if not company:
+                        company = _extract_company_from_url(full_url) or "GeekHunter"
 
-                    link_el = card.select_one('a[href*="/vagas/"], a[href^="http"]')
-                    href = link_el.get("href", "") if link_el else ""
-                    full_url = href if href.startswith("http") else f"https://www.geekhunter.com.br{href}" if href else url
+                    parts = [re.sub(r"\s+", " ", t).strip() for t in card.stripped_strings if t.strip()]
+
+                    pub_date_text = ""
+                    work_model = "Presencial"
+                    detected_loc = ""
+                    resp_texts: List[str] = []
+                    req_skills: List[str] = []
+
+                    section = None
+                    for part in parts:
+                        p_lower = part.lower()
+                        if part == title:
+                            continue
+                        if "publicada" in p_lower and not pub_date_text:
+                            pub_date_text = part
+                            continue
+                        if p_lower == "tarefas e responsabilidades":
+                            section = "resp"
+                            continue
+                        if p_lower == "requisitos":
+                            section = "req"
+                            continue
+
+                        if section == "resp":
+                            resp_texts.append(part)
+                            continue
+                        if section == "req":
+                            if not re.match(r"^\+\d+$", part):
+                                req_skills.append(part)
+                            continue
+
+                        if "remoto" in p_lower:
+                            work_model = "Remoto"
+                        elif "híbrido" in p_lower or "hibrido" in p_lower:
+                            work_model = "Híbrido"
+                        elif "presencial" in p_lower and work_model == "Presencial":
+                            work_model = "Presencial"
+
+                        if (", brasil" in p_lower or re.match(r"^[A-Za-zÀ-ÖØ-öø-ÿ\s.-]+,\s*[A-Z]{2}\b", part)) and not detected_loc:
+                            detected_loc = part
+
+                    if not detected_loc:
+                        detected_loc = location or ("Remoto" if work_model == "Remoto" else "Brasil")
+
+                    desc_chunks: List[str] = []
+                    if resp_texts:
+                        desc_chunks.append(" ".join(resp_texts))
+                    if req_skills:
+                        desc_chunks.append(f"Requisitos: {', '.join(req_skills)}")
+                    description = " | ".join(desc_chunks) if desc_chunks else f"{title} na {company} via GeekHunter"
 
                     jobs.append(
                         JobResponseItem(
                             id=f"geekhunter-{len(jobs)+1}",
                             title=title,
                             company=company,
-                            location=location or "Remoto / Brasil",
+                            location=detected_loc,
                             url=full_url,
                             source="geekhunter",
-                            description=f"{title} na {company} via GeekHunter",
-                            publishedAt=datetime.now(timezone.utc).isoformat(),
-                            workModel="Remoto"
+                            description=description[:600],
+                            publishedAt=parse_geekhunter_date(pub_date_text),
+                            workModel=work_model,
                         )
                     )
-
-                # 2. Extração via React Server Components (RSC) se lista DOM estiver vazia
-                if len(jobs) < limit:
-                    tech_keywords = [
-                        "Desenvolvedor Full Stack Júnior",
-                        "Desenvolvedor Frontend React",
-                        "Desenvolvedor Backend Node.js",
-                        "Desenvolvedor Python Júnior",
-                        "Engenheiro de Software Júnior",
-                        "Desenvolvedor Mobile Flutter / React Native",
-                    ]
-                    for idx, tech_title in enumerate(tech_keywords):
-                        if len(jobs) >= limit:
-                            break
-                        if tech_title in seen_titles:
-                            continue
-                        seen_titles.add(tech_title)
-
-                        jobs.append(
-                            JobResponseItem(
-                                id=f"geekhunter-curated-{idx+1}",
-                                title=tech_title,
-                                company="Empresa Parceira GeekHunter",
-                                location="Remoto",
-                                url="https://www.geekhunter.com/pt/vagas",
-                                source="geekhunter",
-                                description=f"Oportunidade {tech_title} com contratação ágil via GeekHunter.",
-                                publishedAt=datetime.now(timezone.utc).isoformat(),
-                                workModel="Remoto"
-                            )
-                        )
 
             except Exception as e:
                 logger.warning(f"[GeekHunter] Erro ao consultar {url}: {e}")
