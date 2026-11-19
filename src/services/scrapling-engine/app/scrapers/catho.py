@@ -25,6 +25,7 @@ HEADERS = {
     "Upgrade-Insecure-Requests": "1",
 }
 
+
 def parse_catho_relative_date(date_str: str) -> str:
     """Converte strings de data relativa da Catho em ISO string UTC."""
     if not date_str:
@@ -50,10 +51,14 @@ def parse_catho_relative_date(date_str: str) -> str:
         try:
             day = int(date_match.group(1))
             month = int(date_match.group(2))
-            year = int(date_match.group(3)) if date_match.group(3) else now.year
+            has_year = bool(date_match.group(3))
+            year = int(date_match.group(3)) if has_year else now.year
             if year < 100:
                 year += 2000
-            return datetime(year, month, day, tzinfo=timezone.utc).isoformat()
+            parsed_dt = datetime(year, month, day, tzinfo=timezone.utc)
+            if not has_year and parsed_dt > now + timedelta(days=2):
+                parsed_dt = datetime(year - 1, month, day, tzinfo=timezone.utc)
+            return parsed_dt.isoformat()
         except Exception:
             pass
 
@@ -71,13 +76,14 @@ async def scrape_catho(
     Tenta múltiplos caminhos:
     1. Parsing de __NEXT_DATA__ se disponível
     2. Parsing de JSON-LD Schema.org
-    3. Parsing de seletores DOM otimizados
+    3. Parsing de seletores DOM otimizados (com paginação)
     """
     query_str = (query or "desenvolvedor").strip()
     encoded_query = urllib.parse.quote_plus(query_str)
-    
+
     urls_to_try = [
-        f"https://www.catho.com.br/vagas/?q={encoded_query}",
+        f"https://www.catho.com.br/vagas/?q={encoded_query}&page=1",
+        f"https://www.catho.com.br/vagas/?q={encoded_query}&page=2",
     ]
     if "junior" in query_str.lower() or "jr" in query_str.lower():
         urls_to_try.append("https://www.catho.com.br/vagas/desenvolvedor-junior/")
@@ -94,7 +100,7 @@ async def scrape_catho(
             try:
                 logger.info(f"[Catho] Buscando vagas em: {url}")
                 response = await client.get(url)
-                
+
                 if response.status_code != 200:
                     logger.warning(f"[Catho] Resposta HTTP status {response.status_code} para {url}")
                     continue
@@ -107,10 +113,9 @@ async def scrape_catho(
                 if next_data_script and next_data_script.string:
                     try:
                         next_json = json.loads(next_data_script.string)
-                        # Localizar vagas na árvore de props
                         page_props = next_json.get("props", {}).get("pageProps", {})
                         raw_jobs_list = page_props.get("jobList") or page_props.get("jobs") or []
-                        
+
                         if isinstance(raw_jobs_list, dict):
                             raw_jobs_list = raw_jobs_list.get("items", []) or raw_jobs_list.get("data", [])
 
@@ -141,14 +146,14 @@ async def scrape_catho(
                                 JobResponseItem(
                                     id=job_id or f"catho-{len(jobs)+1}",
                                     title=title.strip(),
-                                    company=company.strip(),
-                                    location=loc.strip(),
+                                    company=(company.strip() or "Catho"),
+                                    location=(loc.strip() or location or "Brasil"),
                                     url=full_url,
                                     source="catho",
                                     description=desc.strip(),
                                     publishedAt=parse_catho_relative_date(str(date_raw)),
                                     salary=str(salary).strip() if salary else None,
-                                    workModel="Híbrido" if "hibrido" in (title + desc).lower() else ("Remoto" if "remoto" in (title + desc).lower() else "Presencial")
+                                    workModel="Híbrido" if "hibrido" in (title + desc).lower() else ("Remoto" if "remoto" in (title + desc).lower() else "Presencial"),
                                 )
                             )
                     except Exception as err:
@@ -183,59 +188,85 @@ async def scrape_catho(
                                     JobResponseItem(
                                         id=f"catho-ld-{len(jobs)+1}",
                                         title=title.strip(),
-                                        company=company.strip(),
-                                        location=loc or "Brasil",
+                                        company=(company.strip() or "Catho"),
+                                        location=(loc or location or "Brasil"),
                                         url=job_url,
                                         source="catho",
                                         description=desc[:300].strip() if desc else f"{title} - {company}",
                                         publishedAt=date_posted,
-                                        workModel="Remoto" if "telecommute" in str(item).lower() or "remoto" in title.lower() else None
+                                        workModel="Remoto" if "telecommute" in str(item).lower() or "remoto" in title.lower() else None,
                                     )
                                 )
                     except Exception:
                         pass
 
-                # 3. Fallback: Parse dos Cards DOM
+                # 3. Fallback: Parse dos Cards DOM (estrutura atual article.offer)
                 if len(jobs) < limit:
-                    cards = soup.select('article, [data-testid*="job"], [class*="job-card"], [class*="resultados"] li, [class*="CustomVagasCard"], [class*="search-result"]')
+                    cards = soup.select(
+                        'article.offer, article[data-offer-item-subcontainer], article, [data-testid*="job"], [class*="job-card"]'
+                    )
                     for card in cards:
                         if len(jobs) >= limit:
                             break
-                        
-                        title_el = card.select_one('h2, h3, a[href*="/vagas/"], [class*="title"], [data-testid*="title"]')
+
+                        title_el = card.select_one(
+                            'h2.title_offer a, h2 a, h3 a, a[href*="/vagas/"], h2, h3, [class*="title"], [data-testid*="title"]'
+                        )
                         if not title_el:
                             continue
-                        
-                        title = title_el.get_text(strip=True)
+
+                        title = title_el.get_text(" ", strip=True)
                         if not title or len(title) < 3:
                             continue
 
-                        company_el = card.select_one('[class*="company"], [data-testid*="company"], [class*="empresa"], [class*="info-empresa"]')
-                        company = company_el.get_text(strip=True) if company_el else "Catho"
-
-                        loc_el = card.select_one('[class*="location"], [class*="local"], [data-testid*="location"], [class*="cidade"]')
-                        loc = loc_el.get_text(strip=True) if loc_el else (location or "Brasil")
-
-                        link_el = card.select_one('a[href*="/vagas/"], a[href*="catho.com.br"]')
+                        link_el = title_el if title_el.name == "a" else card.select_one('h2.title_offer a, a[href*="/vagas/"], a[href*="catho.com.br"]')
                         href = link_el.get("href", "") if link_el else ""
-                        full_url = href if href.startswith("http") else f"https://www.catho.com.br{href}" if href else url
+                        full_url = href if href.startswith("http") else (f"https://www.catho.com.br{href}" if href else url)
 
                         if full_url in seen_urls:
                             continue
                         seen_urls.add(full_url)
 
-                        date_el = card.select_one('[class*="date"], [class*="data"], time, [class*="published"]')
-                        date_str = date_el.get_text(strip=True) if date_el else ""
+                        company_el = card.select_one('p span.text-12, [class*="company"], [data-testid*="company"], [class*="empresa"], [class*="info-empresa"]')
+                        company = re.sub(r"\s+", " ", company_el.get_text(" ", strip=True)) if company_el else "Catho"
+                        if not company:
+                            company = "Catho"
+
+                        loc = ""
+                        loc_icon = card.select_one("span.i_job_location")
+                        if loc_icon and loc_icon.parent:
+                            raw_loc = re.sub(r"\s+", " ", loc_icon.parent.get_text(" ", strip=True)).strip()
+                            loc = re.sub(r"^\d+\s*vagas?\s*[-–]\s*", "", raw_loc, flags=re.IGNORECASE).strip()
+                            loc = re.sub(r"^[-–]\s*", "", loc).strip()
+                        if not loc:
+                            loc_el = card.select_one('[class*="location"], [class*="local"], [data-testid*="location"], [class*="cidade"]')
+                            loc = re.sub(r"\s+", " ", loc_el.get_text(" ", strip=True)).strip() if loc_el else ""
+                        if not loc:
+                            loc = location or "Brasil"
+
+                        salary = None
+                        salary_icon = card.select_one("span.i_salary")
+                        if salary_icon and salary_icon.parent:
+                            strong_el = salary_icon.parent.find("strong")
+                            sal_text = strong_el.get_text(" ", strip=True) if strong_el else salary_icon.parent.get_text(" ", strip=True)
+                            sal_text = re.sub(r"\s+", " ", sal_text).strip()
+                            if sal_text:
+                                salary = sal_text
+                        if not salary:
+                            salary_el = card.select_one('[class*="salary"], [class*="salario"], [data-testid*="salary"]')
+                            if salary_el:
+                                salary = salary_el.get_text(" ", strip=True) or None
+
+                        date_el = card.select_one('span.tag, [class*="pub_"], [class*="date"], [class*="data"], time, [class*="published"]')
+                        date_str = date_el.get_text(" ", strip=True) if date_el else ""
                         pub_date = parse_catho_relative_date(date_str)
 
-                        salary_el = card.select_one('[class*="salary"], [class*="salario"], [data-testid*="salary"]')
-                        salary = salary_el.get_text(strip=True) if salary_el else None
-
                         desc_el = card.select_one('[class*="description"], [class*="descricao"], [class*="resumo"]')
-                        desc = desc_el.get_text(strip=True) if desc_el else f"{title} na empresa {company} (Catho)"
+                        desc = desc_el.get_text(" ", strip=True) if desc_el else f"{title} na empresa {company} - {loc} (Catho)"
 
-                        is_remote = "remoto" in (title + " " + desc + " " + loc).lower()
-                        is_hybrid = "híbrido" in (title + " " + desc + " " + loc).lower() or "hibrido" in (title + " " + desc + " " + loc).lower()
+                        combined = f"{title} {desc} {loc}".lower()
+                        is_remote = "remoto" in combined or "home office" in combined
+                        is_hybrid = "híbrido" in combined or "hibrido" in combined
                         work_model = "Remoto" if is_remote else ("Híbrido" if is_hybrid else "Presencial")
 
                         jobs.append(
@@ -249,7 +280,7 @@ async def scrape_catho(
                                 description=desc,
                                 publishedAt=pub_date,
                                 salary=salary,
-                                workModel=work_model
+                                workModel=work_model,
                             )
                         )
 
