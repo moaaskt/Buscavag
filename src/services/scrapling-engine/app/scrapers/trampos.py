@@ -1,6 +1,6 @@
-import json
 import logging
 import re
+import urllib.parse
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 import httpx
@@ -15,14 +15,18 @@ HEADERS = {
     "Referer": "https://trampos.co/oportunidades",
 }
 
+
 def parse_iso_date(date_str: Optional[str]) -> str:
     if not date_str:
         return datetime.now(timezone.utc).isoformat()
     try:
         dt = datetime.fromisoformat(date_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc).isoformat()
     except Exception:
         return datetime.now(timezone.utc).isoformat()
+
 
 async def scrape_trampos(
     query: Optional[str] = "desenvolvedor",
@@ -31,20 +35,32 @@ async def scrape_trampos(
     options: Optional[Dict[str, Any]] = None,
 ) -> List[JobResponseItem]:
     """
-    Scraper de alta velocidade para a plataforma Trampos.co via API oficial v2.
+    Scraper de alta velocidade para a plataforma Trampos.co via API oficial v2 filtrando categorias e termos de TI.
     """
     raw_query = (query or "desenvolvedor").strip()
     jobs: List[JobResponseItem] = []
     seen_ids = set()
 
-    api_url = "https://trampos.co/api/v2/opportunities"
+    api_urls = [
+        "https://trampos.co/api/v2/opportunities?ct[]=ti&ct[]=programacao",
+        f"https://trampos.co/api/v2/opportunities?tr={urllib.parse.quote_plus(raw_query)}",
+        "https://trampos.co/api/v2/opportunities?tr=software",
+    ]
+    api_urls = list(dict.fromkeys(api_urls))
 
     async with httpx.AsyncClient(headers=HEADERS, timeout=15.0, follow_redirects=True) as client:
-        try:
-            logger.info(f"[Trampos] Consultando API oficial: {api_url}")
-            response = await client.get(api_url)
+        for api_url in api_urls:
+            if len(jobs) >= limit:
+                break
 
-            if response.status_code == 200:
+            try:
+                logger.info(f"[Trampos] Consultando API oficial: {api_url}")
+                response = await client.get(api_url)
+
+                if response.status_code != 200:
+                    logger.warning(f"[Trampos] API respondeu com status {response.status_code} para {api_url}")
+                    continue
+
                 data = response.json()
                 opps = data.get("opportunities", [])
 
@@ -55,9 +71,10 @@ async def scrape_trampos(
                         continue
 
                     opp_id = str(opp.get("id") or "")
-                    if opp_id in seen_ids:
+                    if opp_id and opp_id in seen_ids:
                         continue
-                    seen_ids.add(opp_id)
+                    if opp_id:
+                        seen_ids.add(opp_id)
 
                     title = opp.get("name") or opp.get("title") or ""
                     if not title:
@@ -81,11 +98,13 @@ async def scrape_trampos(
                     salary_raw = opp.get("salary")
                     salary = salary_raw if salary_raw and "NÃO DIVULGADA" not in salary_raw.upper() else None
 
-                    # Gerar URL amigável
                     slug = re.sub(r"[^a-zA-Z0-9]+", "-", title.lower()).strip("-")
                     job_url = f"https://trampos.co/oportunidades/{opp_id}-{slug}" if opp_id else "https://trampos.co/oportunidades"
 
                     pub_date = parse_iso_date(opp.get("published_at"))
+                    category = opp.get("category_name") or "Tecnologia"
+                    type_name = opp.get("type_name") or "Não informado"
+                    description = f"{title} na empresa {company_name} ({loc}) | Área: {category} | Contrato: {type_name}"
 
                     jobs.append(
                         JobResponseItem(
@@ -95,15 +114,15 @@ async def scrape_trampos(
                             location=loc,
                             url=job_url,
                             source="trampos",
-                            description=f"{title} na empresa {company_name} ({loc})",
+                            description=description,
                             publishedAt=pub_date,
                             salary=salary,
                             workModel=work_model,
-                            extra={"category": opp.get("category_name")}
+                            extra={"category": category, "contractType": type_name},
                         )
                     )
-        except Exception as e:
-            logger.warning(f"[Trampos] Erro ao consultar API: {e}")
+            except Exception as e:
+                logger.warning(f"[Trampos] Erro ao consultar API ({api_url}): {e}")
 
     logger.info(f"[Trampos] Coletadas {len(jobs)} vagas com sucesso para query '{raw_query}'")
     return jobs

@@ -1,6 +1,5 @@
 import logging
 import re
-import urllib.parse
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 import httpx
@@ -15,6 +14,12 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
 }
+
+BR_TZ = timezone(timedelta(hours=-3))
+UF_PATTERN = re.compile(
+    r"-\s*(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b"
+)
+
 
 def parse_infojobs_date(date_str: str) -> str:
     if not date_str:
@@ -33,10 +38,24 @@ def parse_infojobs_date(date_str: str) -> str:
         try:
             day = int(date_match.group(1))
             month = int(date_match.group(2))
-            return datetime(now.year, month, day, tzinfo=timezone.utc).isoformat()
+            parsed_dt = datetime(now.year, month, day, tzinfo=timezone.utc)
+            if parsed_dt > now + timedelta(days=2):
+                parsed_dt = datetime(now.year - 1, month, day, tzinfo=timezone.utc)
+            return parsed_dt.isoformat()
         except Exception:
             pass
     return now.isoformat()
+
+
+def _parse_js_date_attr(data_value: str) -> Optional[str]:
+    if not data_value:
+        return None
+    try:
+        dt = datetime.strptime(data_value.strip(), "%Y/%m/%d %H:%M:%S").replace(tzinfo=BR_TZ)
+        return dt.astimezone(timezone.utc).isoformat()
+    except Exception:
+        return None
+
 
 async def scrape_infojobs(
     query: Optional[str] = "desenvolvedor",
@@ -45,16 +64,18 @@ async def scrape_infojobs(
     options: Optional[Dict[str, Any]] = None,
 ) -> List[JobResponseItem]:
     """
-    Scraper otimizado para o portal InfoJobs Brasil.
+    Scraper otimizado para o portal InfoJobs Brasil com extração precisa de empresa e timestamp exato.
     """
     raw_query = (query or "desenvolvedor").strip()
     slug_query = re.sub(r"[^a-zA-Z0-9]+", "-", raw_query.lower()).strip("-")
-    
-    urls = [
+
+    candidate_urls = [
         f"https://www.infojobs.com.br/vagas-de-emprego-{slug_query}.aspx",
+        "https://www.infojobs.com.br/vagas-de-emprego-desenvolvedor-full-stack.aspx",
         "https://www.infojobs.com.br/vagas-de-emprego-desenvolvedor-junior.aspx",
-        "https://www.infojobs.com.br/vagas-de-emprego-desenvolvedor.aspx",
+        "https://www.infojobs.com.br/vagas-de-emprego-programador.aspx",
     ]
+    urls = list(dict.fromkeys(candidate_urls))
 
     jobs: List[JobResponseItem] = []
     seen_urls = set()
@@ -81,7 +102,7 @@ async def scrape_infojobs(
                     title_el = card.select_one('h2, h3, .js_linkVacancy, a[href*="/vaga-de-"], [class*="title"]')
                     if not title_el:
                         continue
-                    title = title_el.get_text(strip=True)
+                    title = re.sub(r"\s+", " ", title_el.get_text(" ", strip=True)).strip()
                     if not title or len(title) < 3:
                         continue
 
@@ -95,34 +116,41 @@ async def scrape_infojobs(
                         continue
                     seen_urls.add(full_url)
 
+                    # Extrair empresa real via link /empresa-
+                    company_el = card.select_one('a[href*="/empresa-"]')
+                    company = re.sub(r"\s+", " ", company_el.get_text(" ", strip=True)).strip() if company_el else ""
+                    if not company:
+                        company = "Empresa Confidencial (InfoJobs)"
+
+                    # Extrair timestamp exato de .js_date[data-value]
+                    js_date_el = card.select_one(".js_date")
+                    exact_pub_date = _parse_js_date_attr(js_date_el.get("data-value", "")) if js_date_el else None
+
                     # Extrair textos estruturados
-                    text_parts = [t.strip() for t in card.stripped_strings]
-                    
-                    company = "InfoJobs Partner"
+                    text_parts = [re.sub(r"\s+", " ", t).strip() for t in card.stripped_strings if t.strip()]
+
                     loc = location or "Brasil"
                     salary = None
                     work_model = "Presencial"
                     date_str = ""
-                    desc = f"{title} no InfoJobs"
+                    desc = f"{title} na empresa {company} (InfoJobs)"
 
                     for part in text_parts:
                         p_lower = part.lower()
-                        if "empresa" in p_lower or "ltda" in p_lower or "s.a." in p_lower:
-                            company = part
-                        elif any(uf in part for uf in [" - SP", " - RJ", " - SC", " - PR", " - MG", " - RS", " - BA"]):
+                        if UF_PATTERN.search(part) and len(part) <= 60:
                             loc = part
-                        elif "r$" in part.lower() or "a combinar" in part.lower():
+                        elif "r$" in p_lower or "a combinar" in p_lower:
                             salary = part
-                        elif "remoto" in p_lower:
+                        elif "remoto" in p_lower or "home office" in p_lower:
                             work_model = "Remoto"
                         elif "híbrido" in p_lower or "hibrido" in p_lower:
                             work_model = "Híbrido"
-                        elif "hoje" in p_lower or "ontem" in p_lower or "dias" in p_lower:
+                        elif any(k in p_lower for k in ("hoje", "ontem", "dias", "hora", "minuto")):
                             date_str = part
-                        elif len(part) > 40 and not desc.startswith("Principais"):
+                        elif len(part) > 40 and not part.startswith("Principais"):
                             desc = part
 
-                    pub_date = parse_infojobs_date(date_str)
+                    pub_date = exact_pub_date or parse_infojobs_date(date_str)
 
                     jobs.append(
                         JobResponseItem(
@@ -135,7 +163,7 @@ async def scrape_infojobs(
                             description=desc,
                             publishedAt=pub_date,
                             salary=salary,
-                            workModel=work_model
+                            workModel=work_model,
                         )
                     )
 

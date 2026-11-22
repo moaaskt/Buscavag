@@ -80,6 +80,9 @@ export function slugifyLocation(location?: string | null): string {
 
   let cleaned = cleanText(location);
 
+  // 1. Remover ruídos de botões ou ações agregadas acidentalmente por scrapers
+  cleaned = cleaned.replace(/\b(copiar\s*link|compartilhar|ver\s*vaga|detalhes|candidatar|enviar\s*curriculo)\b/gi, ' ');
+
   // Se indicar trabalho remoto / home office / qualquer local
   if (
     /\b(remoto|home\s*office|anywhere|teletrabalho|a\s*distancia|100%\s*remoto|virtual)\b/i.test(cleaned)

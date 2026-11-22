@@ -80,6 +80,10 @@ export class PythonBridgeClient {
     });
   }
 
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   /**
    * Verifica se o microserviço Python Scrapling Engine está online e saudável.
    */
