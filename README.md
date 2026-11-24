@@ -358,7 +358,3 @@ buscavag/
 3. **Multi-Tenancy por Design**: Todos os registros de candidaturas, status de Kanban, cartas geradas e currículos utilizam chaves relacionais vinculadas ao usuário autenticado.
 
 ---
-
-## 📄 Licença
-
-Este software é licenciado sob uso privado para automação de carreira, inteligência de dados e prospecção técnica. Todos os direitos reservados.
