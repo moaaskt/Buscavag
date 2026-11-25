@@ -1,5 +1,11 @@
 import assert from 'node:assert';
-import { isTechJob, matchesBlacklist, matchesWhitelist, cleanJobTitle } from './config/jobFilters.js';
+import {
+  isTechJob,
+  isProgrammingOrTechJob,
+  matchesBlacklist,
+  matchesWhitelist,
+  cleanJobTitle,
+} from './config/jobFilters.js';
 import { HermesEvaluator } from './services/hermesEvaluator.js';
 import { PlatformSource, RawJob } from './types/job.js';
 
@@ -152,6 +158,7 @@ async function runFilterTests() {
       `ERRO: O cargo técnico "${title}" DEVERIA ser aprovado, mas foi rejeitado.`
     );
   }
+  assert.strictEqual(isProgrammingOrTechJob, isTechJob);
   console.log(`  ✓ Todos os ${techTestCases.length} cargos técnicos de software foram APROVADOS.`);
 
   // 4. Teste Heurístico do HermesEvaluator

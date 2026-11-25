@@ -403,6 +403,7 @@ export function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
       CREATE INDEX IF NOT EXISTS idx_jobs_city ON jobs(city);
       CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
+      CREATE INDEX IF NOT EXISTS idx_jobs_public_catalog ON jobs(status, is_tech_software, published_at DESC, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_logs_run_id ON scraper_logs(run_id);
       CREATE INDEX IF NOT EXISTS idx_logs_level ON scraper_logs(level);
       CREATE INDEX IF NOT EXISTS idx_logs_scraper_name ON scraper_logs(scraper_name);
