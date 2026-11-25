@@ -33,6 +33,11 @@ export const HARD_EXCLUSION_PATTERNS: Array<{ pattern: RegExp; name: string }> =
     pattern: /\b(montagem\s+de\s+servidores|ajudante\s+de\s+torno|montador[a]?\s+de\s+pain[eé]is|eletricista\s+predial|esmerilhador|inspetor[a]?\s+da\s+qualidade|t[eé]cnico\s+de\s+inspe[cç][aã]o|t[eé]cnico\s+de\s+backup\s+operacional)\b/i,
     name: 'Hard Exclusion (Montagem Física / Fabril / Operacional)',
   },
+  // 3. Funções comerciais / vendas com nomenclatura "Desenvolvedor de Vendas / Negócios" ou "Seller Dev"
+  {
+    pattern: /\b(desenvolvedor[a]?\s+de\s+(vendas|neg[oó]cios)|seller\s+dev)\b/i,
+    name: 'Hard Exclusion (Vendas / Comercial — Seller Dev)',
+  },
 ];
 
 export const TITLE_BLACKLIST_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
@@ -311,6 +316,7 @@ export function isTechJob(title: string): boolean {
  * Alias explícito para garantir conformidade exclusiva com vagas de programação e engenharia de software.
  */
 export const isProgrammingJob = isTechJob;
+export const isProgrammingOrTechJob = isTechJob;
 
 /**
  * Filtro rígido de fontes/plataformas bloqueadas (ex: fontes pagas como beBee).
