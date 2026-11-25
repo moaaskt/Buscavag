@@ -1,6 +1,10 @@
 import { spawnSync } from 'child_process';
+import crypto from 'crypto';
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import Database from 'better-sqlite3';
 
 interface TestSuite {
   id: string;
@@ -78,48 +82,82 @@ const TEST_SUITES: TestSuite[] = [
     file: 'src/test-job-filters-antinoise.ts',
     description: 'Blindagem anti-ruído para vagas não-tech, usinagem/CNC e sanitização de botões',
   },
+  {
+    id: 'phase1-public-portal',
+    name: 'Public Portal Catalog',
+    file: 'src/test-phase1-public-portal.ts',
+    description: 'API pública /api/public/jobs, deduplicação CTE, cópia isolada, backup/hash e segurança V4/V5',
+  },
 ];
 
-export function runAllSuites(suites: TestSuite[] = TEST_SUITES): { results: TestResult[]; allPassed: boolean } {
+function sha256File(filePath: string): string {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+export function runAllSuites(
+  suites: TestSuite[] = TEST_SUITES,
+  options?: { databasePath?: string }
+): { results: TestResult[]; allPassed: boolean } {
+  const providedDbPath = options?.databasePath || process.env.DATABASE_PATH;
+  let fallbackTempDir: string | null = null;
+  const effectiveDbPath =
+    providedDbPath && providedDbPath.trim()
+      ? providedDbPath
+      : (() => {
+          fallbackTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'buscavag-sync-runner-'));
+          return path.join(fallbackTempDir, 'runner-buscavag.db');
+        })();
+
   console.log('\n======================================================');
-  console.log('  🚀 BUSCAVAG - UNIFIED TEST RUNNER (Milestone v18.0)');
+  console.log('  🚀 BUSCAVAG - UNIFIED TEST RUNNER (Milestone v26.0)');
   console.log(`  Data: ${new Date().toLocaleString('pt-BR')}`);
   console.log(`  Total de Suítes Orquestradas: ${suites.length}`);
+  console.log(`  DATABASE_PATH isolado: ${effectiveDbPath}`);
   console.log('======================================================\n');
 
   const results: TestResult[] = [];
   const totalStartTime = Date.now();
 
-  for (let i = 0; i < suites.length; i++) {
-    const suite = suites[i];
-    const suiteNum = `[${i + 1}/${suites.length}]`;
-    process.stdout.write(`⏳ Executando ${suiteNum} ${suite.name} (${suite.file})... `);
+  try {
+    for (let i = 0; i < suites.length; i++) {
+      const suite = suites[i];
+      const suiteNum = `[${i + 1}/${suites.length}]`;
+      process.stdout.write(`⏳ Executando ${suiteNum} ${suite.name} (${suite.file})... `);
 
-    const startTime = Date.now();
-    const child = spawnSync('npx', ['tsx', suite.file], {
-      cwd: process.cwd(),
-      shell: true,
-      encoding: 'utf-8',
-      env: { ...process.env, NODE_ENV: 'test' },
-    });
-    const durationMs = Date.now() - startTime;
+      const startTime = Date.now();
+      const child = spawnSync('npx', ['tsx', suite.file], {
+        cwd: process.cwd(),
+        shell: true,
+        encoding: 'utf-8',
+        env: {
+          ...process.env,
+          NODE_ENV: 'test',
+          DATABASE_PATH: effectiveDbPath,
+        },
+      });
+      const durationMs = Date.now() - startTime;
 
-    const exitCode = child.status ?? (child.error ? 1 : 0);
-    const passed = exitCode === 0;
+      const exitCode = child.status ?? (child.error ? 1 : 0);
+      const passed = exitCode === 0;
 
-    if (passed) {
-      console.log(`✅ PASS (${durationMs}ms)`);
-    } else {
-      console.log(`❌ FAIL (${durationMs}ms, exit code: ${exitCode})`);
+      if (passed) {
+        console.log(`✅ PASS (${durationMs}ms)`);
+      } else {
+        console.log(`❌ FAIL (${durationMs}ms, exit code: ${exitCode})`);
+      }
+
+      results.push({
+        suite,
+        passed,
+        exitCode,
+        durationMs,
+        errorOutput: passed ? undefined : child.stderr || child.stdout,
+      });
     }
-
-    results.push({
-      suite,
-      passed,
-      exitCode,
-      durationMs,
-      errorOutput: passed ? undefined : child.stderr || child.stdout,
-    });
+  } finally {
+    if (fallbackTempDir) {
+      fs.rmSync(fallbackTempDir, { recursive: true, force: true });
+    }
   }
 
   const totalDuration = Date.now() - totalStartTime;
@@ -141,7 +179,9 @@ export function runAllSuites(suites: TestSuite[] = TEST_SUITES): { results: Test
   }
 
   console.log('------------------------------------------------------');
-  console.log(`Total: ${suites.length} | Aprovadas: ${passedCount} | Falhas: ${failedCount} | Tempo Total: ${(totalDuration / 1000).toFixed(2)}s\n`);
+  console.log(
+    `Total: ${suites.length} | Aprovadas: ${passedCount} | Falhas: ${failedCount} | Tempo Total: ${(totalDuration / 1000).toFixed(2)}s\n`
+  );
 
   if (!allPassed) {
     console.error('🚨 [FALHA DETECTADA] Uma ou mais suítes de testes falharam:');
@@ -158,8 +198,49 @@ export function runAllSuites(suites: TestSuite[] = TEST_SUITES): { results: Test
   return { results, allPassed };
 }
 
+async function main(): Promise<void> {
+  const realDbPath = path.resolve(process.cwd(), 'buscavag.db');
+  const realDbExists = fs.existsSync(realDbPath);
+  const preRealHash = realDbExists ? sha256File(realDbPath) : null;
+
+  const runnerTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'buscavag-runner-'));
+  const runnerDbPath = path.join(runnerTempDir, 'runner-buscavag.db');
+
+  let allPassed = false;
+  try {
+    if (realDbExists) {
+      const sourceDb = new Database(realDbPath, { readonly: true, fileMustExist: true });
+      try {
+        await sourceDb.backup(runnerDbPath);
+      } finally {
+        sourceDb.close();
+      }
+    }
+
+    process.env.DATABASE_PATH = runnerDbPath;
+    const outcome = runAllSuites(TEST_SUITES, { databasePath: runnerDbPath });
+    allPassed = outcome.allPassed;
+  } finally {
+    fs.rmSync(runnerTempDir, { recursive: true, force: true });
+  }
+
+  if (realDbExists && preRealHash !== null) {
+    const postRealHash = sha256File(realDbPath);
+    if (postRealHash !== preRealHash) {
+      throw new Error(
+        `FATAL: Hash SHA-256 do buscavag.db real foi modificado durante test-runner! pré=${preRealHash} pós=${postRealHash}`
+      );
+    }
+    console.log(`✅ [INTEGRIDADE] buscavag.db real permaneceu intocado (SHA-256: ${postRealHash})`);
+  }
+
+  process.exit(allPassed ? 0 : 1);
+}
+
 // Execução direta do runner via CLI
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { allPassed } = runAllSuites();
-  process.exit(allPassed ? 0 : 1);
+  main().catch((err) => {
+    console.error('[test-runner ERROR]:', err);
+    process.exit(1);
+  });
 }
