@@ -72,6 +72,8 @@ async function runFilterTests() {
     'Vendedor Interno / Balconista',
     'Operador de Caixa e Atendimento',
     'BDRCandidatar-se',
+    'Desenvolvedor(A) De Vendas Sênior - (Seller Dev Sr.)',
+    'Seller Dev Senior (Desenvolvedor(a) de Vendas Sênior)',
     // Marketing não-tech
     'ESTAGIÁRIO DE MARKETINGCandidatar-se',
     'ESTÁGIO EM MARKETING / PUBLICIDADE E PROPAGANDA - VGACNR309Candidatar-se',
