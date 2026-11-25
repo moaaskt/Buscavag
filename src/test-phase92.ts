@@ -207,7 +207,7 @@ async function runPhase92Tests() {
   assert(indexList.includes('idx_jobs_fingerprint'), 'A tabela jobs do SQLite deve conter o índice idx_jobs_fingerprint');
 
   // 4.2. Executar script de deduplicação e validar integridade do acervo
-  const deduplicateReport = deduplicateDatabase();
+  const deduplicateReport = await deduplicateDatabase();
   assert(typeof deduplicateReport.totalExamined === 'number', 'deduplicateDatabase deve retornar totalExamined');
   assert(typeof deduplicateReport.uniqueJobsRemaining === 'number', 'deduplicateDatabase deve retornar uniqueJobsRemaining');
   assert(deduplicateReport.duplicateGroupsFound === 0, 'Após a migração, não deve haver nenhum grupo de duplicatas remanescente');

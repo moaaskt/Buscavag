@@ -237,7 +237,7 @@ async function runPhase93Tests() {
   // 9. EXECUÇÃO DO SCRIPT DE NORMALIZAÇÃO RETROATIVA
   // ====================================================
 
-  const normStats = normalizeDatabaseLocations();
+  const normStats = await normalizeDatabaseLocations();
   assert(normStats.totalAnalyzed > 0, 'normalizeDatabaseLocations deve analisar as vagas do banco');
   console.log(`Auditoria do banco: ${normStats.totalAnalyzed} vagas analisadas, ${normStats.withCity} com cidade, ${normStats.withState} com UF, ${normStats.remoteCount} remotas.`);
 
