@@ -8,9 +8,11 @@ import Database from 'better-sqlite3';
 import { isTechJob } from './config/jobFilters';
 import { generateJobFingerprint } from './utils/fingerprint';
 import {
+  buildPublicJobSlug,
   buildVagasHref,
   computePaginationPages,
   formatPlatformLabel,
+  formatRelativePublishedAtPtBr,
   getSafeExternalJobUrl,
   normalizeOptionalJobField,
 } from './utils/publicJobFormatters';
@@ -640,10 +642,54 @@ async function runPhase1PublicPortalTests() {
     assert.strictEqual(normalizeOptionalJobField('Não informado'), null);
     assert.strictEqual(normalizeOptionalJobField('Não especificado'), null);
     assert.strictEqual(normalizeOptionalJobField('  Sênior  '), 'Sênior');
-    assert.strictEqual(buildVagasHref({ q: 'react', page: 1 }), '/vagas?q=react');
-    assert.strictEqual(formatPlatformLabel('gupy'), 'Gupy');
 
-    console.log('  ✅ [PASS] Proteções ASVS V4/V5, supressão de sentinelas e URL safety aprovados');
+    // URL Builder & Encoding (buildVagasHref)
+    assert.strictEqual(buildVagasHref({ q: '', page: 1 }), '/vagas');
+    assert.strictEqual(buildVagasHref({ q: 'react', page: 1 }), '/vagas?q=react');
+    assert.strictEqual(buildVagasHref({ q: 'c#', page: 2 }), '/vagas?q=c%23&page=2');
+    assert.strictEqual(buildVagasHref({ q: 'node.js', page: 2 }), '/vagas?q=node.js&page=2');
+    assert.strictEqual(buildVagasHref({ q: '', page: 3 }), '/vagas?page=3');
+
+    // Pagination Windowing & Clamping (computePaginationPages)
+    assert.deepStrictEqual(computePaginationPages(1, 5), [1, 2, 3, 4, 5]);
+    assert.deepStrictEqual(
+      computePaginationPages(5, 12),
+      [1, 'ellipsis', 4, 5, 6, 'ellipsis', 12],
+      'computePaginationPages(5, 12) deve gerar janela com ellipsis sem duplicatas'
+    );
+    assert.deepStrictEqual(computePaginationPages(999, 5), [1, 2, 3, 4, 5]);
+    const clampedPages12 = computePaginationPages(999, 12);
+    const numericClamped12 = clampedPages12.filter((item): item is number => typeof item === 'number');
+    assert.ok(numericClamped12.length > 0, 'computePaginationPages(999, 12) deve retornar páginas numéricas');
+    assert.ok(
+      numericClamped12.every((n) => n >= 1 && n <= 12),
+      'computePaginationPages(999, 12) nunca pode emitir números fora de 1..12 (como 998, 999 ou 1000)'
+    );
+    assert.strictEqual(
+      new Set(numericClamped12).size,
+      numericClamped12.length,
+      'computePaginationPages(999, 12) não pode conter números duplicados'
+    );
+    assert.deepStrictEqual(computePaginationPages(1, 0), []);
+    assert.deepStrictEqual(computePaginationPages(1, -3), []);
+
+    // Platform Labels, Slugs & Relative Dates
+    assert.strictEqual(formatPlatformLabel('gupy'), 'Gupy');
+    assert.strictEqual(formatPlatformLabel('linkedin_posts'), 'LinkedIn');
+    assert.strictEqual(formatPlatformLabel('catho'), 'Catho');
+    assert.strictEqual(
+      buildPublicJobSlug('Dev React Sênior', '12345678-abcd'),
+      'dev-react-senior-12345678'
+    );
+    const nowIsoForDate = new Date().toISOString();
+    const yesterdayIso = new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString();
+    const threeDaysAgoIso = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 - 60_000).toISOString();
+    assert.strictEqual(formatRelativePublishedAtPtBr(nowIsoForDate), 'Hoje');
+    assert.strictEqual(formatRelativePublishedAtPtBr(yesterdayIso), 'Ontem');
+    assert.strictEqual(formatRelativePublishedAtPtBr(threeDaysAgoIso), 'Há 3 dias');
+    assert.strictEqual(formatRelativePublishedAtPtBr(null, null), '');
+
+    console.log('  ✅ [PASS] Proteções ASVS V4/V5, supressão de sentinelas, paginação com clamp e formatadores aprovados');
   } finally {
     try {
       dbModule?.db.close();
